@@ -1,0 +1,117 @@
+{
+  "resume_id": "resume_sp",
+  "resume_file": "data/sample_resumes/resume_sp.pdf",
+  "exported_at": "2025-12-11T02:01:43.550487",
+  "summary": {
+    "resume_id": "resume_sp",
+    "total_chunks": 15,
+    "sections": [
+      "overview",
+      "skills",
+      "experience",
+      "education",
+      "project"
+    ],
+    "preview": {
+      "overview": [
+        "Name: Shubham Pareek"
+      ],
+      "skills": [
+        "Technical Skills: Python, C, C++, SQL, R, Bash., Hugging Face, BERT, spaCy, NLTK, LangChain, RAG, Fi"
+      ],
+      "experience": [
+        "Data Analyst Research Intern\nPeriod: Sep 2025 - Present",
+        "Programmer Analyst\nPeriod: Jan 2024 - Jul 2025"
+      ],
+      "education": [
+        "Columbia University New York City, NY",
+        "Masters in Science, Data Science May 2027\nYear: 2027",
+        "Relevant Course Work: Applied Machine Learning, Applied Deep Learning, Probability and Statistics, E",
+        "SRM Institute of Science and Technology Chennai, India",
+        "Bachelors of Technology in Computer Science and Engineering, CGPA: 8.83/10.0 Jul 2023\nYear: 2023"
+      ],
+      "project": [
+        "Project: Energy Consumption Forecasting System Jun 2025 - Oct 2025",
+        "Project: XGBoost and LSTM Architectures.",
+        "Project: baseline LSTM model RMSE by 28%.",
+        "Project: with 95% confidence intervals.",
+        "Project: Next-Gen Intrusion Detection System Jun 2023 - Nov 2023",
+        "Project: threat detection metrics, enabling security teams to identify attack patterns."
+      ]
+    }
+  },
+  "prompts": [
+    {
+      "id": "resume_sp_mixed_general",
+      "focus_area": null,
+      "question_type": "mixed",
+      "prompt": "You are an expert interviewer. Generate 5 interview questions (mix of technical and behavioral) based on the candidate's resume.\n\nHere is the candidate's resume information:\n\n[OVERVIEW]\nName: Shubham Pareek\n\n[SKILLS]\nTechnical Skills: Python, C, C++, SQL, R, Bash., Hugging Face, BERT, spaCy, NLTK, LangChain, RAG, Fine-tuning, CNN, RNN, LSTM, Transformers., Scikit-learn, TensorFlow, PyTorch, XGBoost, LightGBM, Keras, ARIMA, Pandas, NumPy, Matplotlib., Git, Docker, FastAPI, Flask, Streamlit, Jupyter, VS Code, R Studio.\n\n[EXPERIENCE]\nData Analyst Research Intern\nPeriod: Sep 2025 - Present\n\n[EXPERIENCE]\nProgrammer Analyst\nPeriod: Jan 2024 - Jul 2025\n\n[EDUCATION]\nColumbia University New York City, NY\n\n[EDUCATION]\nMasters in Science, Data Science May 2027\nYear: 2027\n\n[EDUCATION]\nRelevant Course Work: Applied Machine Learning, Applied Deep Learning, Probability and Statistics, Exploratory Data\nAnalysis/Visual. Additional Role: Teaching Assistant - Cloud Computing.\n\n[EDUCATION]\nSRM Institute of Science and Technology Chennai, India\n\n[EDUCATION]\nBachelors of Technology in Computer Science and Engineering, CGPA: 8.83/10.0 Jul 2023\nYear: 2023\n\n[PROJECT]\nProject: Energy Consumption Forecasting System Jun 2025 - Oct 2025\n\n[PROJECT]\nProject: XGBoost and LSTM Architectures.\n\n[PROJECT]\nProject: baseline LSTM model RMSE by 28%.\n\n[PROJECT]\nProject: with 95% confidence intervals.\n\n[PROJECT]\nProject: Next-Gen Intrusion Detection System Jun 2023 - Nov 2023\n\n[PROJECT]\nProject: threat detection metrics, enabling security teams to identify attack patterns.\n\nGenerate specific, relevant interview questions based on this resume."
+    },
+    {
+      "id": "resume_sp_technical_general",
+      "focus_area": null,
+      "question_type": "technical",
+      "prompt": "You are an expert interviewer. Generate 5 technical interview questions focusing on the candidate's skills and projects.\n\nHere is the candidate's resume information:\n\n[OVERVIEW]\nName: Shubham Pareek\n\n[SKILLS]\nTechnical Skills: Python, C, C++, SQL, R, Bash., Hugging Face, BERT, spaCy, NLTK, LangChain, RAG, Fine-tuning, CNN, RNN, LSTM, Transformers., Scikit-learn, TensorFlow, PyTorch, XGBoost, LightGBM, Keras, ARIMA, Pandas, NumPy, Matplotlib., Git, Docker, FastAPI, Flask, Streamlit, Jupyter, VS Code, R Studio.\n\n[EXPERIENCE]\nData Analyst Research Intern\nPeriod: Sep 2025 - Present\n\n[EXPERIENCE]\nProgrammer Analyst\nPeriod: Jan 2024 - Jul 2025\n\n[EDUCATION]\nColumbia University New York City, NY\n\n[EDUCATION]\nMasters in Science, Data Science May 2027\nYear: 2027\n\n[EDUCATION]\nRelevant Course Work: Applied Machine Learning, Applied Deep Learning, Probability and Statistics, Exploratory Data\nAnalysis/Visual. Additional Role: Teaching Assistant - Cloud Computing.\n\n[EDUCATION]\nSRM Institute of Science and Technology Chennai, India\n\n[EDUCATION]\nBachelors of Technology in Computer Science and Engineering, CGPA: 8.83/10.0 Jul 2023\nYear: 2023\n\n[PROJECT]\nProject: Energy Consumption Forecasting System Jun 2025 - Oct 2025\n\n[PROJECT]\nProject: XGBoost and LSTM Architectures.\n\n[PROJECT]\nProject: baseline LSTM model RMSE by 28%.\n\n[PROJECT]\nProject: with 95% confidence intervals.\n\n[PROJECT]\nProject: Next-Gen Intrusion Detection System Jun 2023 - Nov 2023\n\n[PROJECT]\nProject: threat detection metrics, enabling security teams to identify attack patterns.\n\nGenerate specific, relevant interview questions based on this resume."
+    },
+    {
+      "id": "resume_sp_behavioral_general",
+      "focus_area": null,
+      "question_type": "behavioral",
+      "prompt": "You are an expert interviewer. Generate 5 behavioral interview questions based on the candidate's experience.\n\nHere is the candidate's resume information:\n\n[OVERVIEW]\nName: Shubham Pareek\n\n[SKILLS]\nTechnical Skills: Python, C, C++, SQL, R, Bash., Hugging Face, BERT, spaCy, NLTK, LangChain, RAG, Fine-tuning, CNN, RNN, LSTM, Transformers., Scikit-learn, TensorFlow, PyTorch, XGBoost, LightGBM, Keras, ARIMA, Pandas, NumPy, Matplotlib., Git, Docker, FastAPI, Flask, Streamlit, Jupyter, VS Code, R Studio.\n\n[EXPERIENCE]\nData Analyst Research Intern\nPeriod: Sep 2025 - Present\n\n[EXPERIENCE]\nProgrammer Analyst\nPeriod: Jan 2024 - Jul 2025\n\n[EDUCATION]\nColumbia University New York City, NY\n\n[EDUCATION]\nMasters in Science, Data Science May 2027\nYear: 2027\n\n[EDUCATION]\nRelevant Course Work: Applied Machine Learning, Applied Deep Learning, Probability and Statistics, Exploratory Data\nAnalysis/Visual. Additional Role: Teaching Assistant - Cloud Computing.\n\n[EDUCATION]\nSRM Institute of Science and Technology Chennai, India\n\n[EDUCATION]\nBachelors of Technology in Computer Science and Engineering, CGPA: 8.83/10.0 Jul 2023\nYear: 2023\n\n[PROJECT]\nProject: Energy Consumption Forecasting System Jun 2025 - Oct 2025\n\n[PROJECT]\nProject: XGBoost and LSTM Architectures.\n\n[PROJECT]\nProject: baseline LSTM model RMSE by 28%.\n\n[PROJECT]\nProject: with 95% confidence intervals.\n\n[PROJECT]\nProject: Next-Gen Intrusion Detection System Jun 2023 - Nov 2023\n\n[PROJECT]\nProject: threat detection metrics, enabling security teams to identify attack patterns.\n\nGenerate specific, relevant interview questions based on this resume."
+    },
+    {
+      "id": "resume_sp_mixed_technical skills",
+      "focus_area": "technical skills",
+      "question_type": "mixed",
+      "prompt": "You are an expert interviewer. Generate 5 interview questions (mix of technical and behavioral) based on the candidate's resume. Focus specifically on: technical skills.\n\nHere is the candidate's resume information:\n\n[SKILLS]\nTechnical Skills: Python, C, C++, SQL, R, Bash., Hugging Face, BERT, spaCy, NLTK, LangChain, RAG, Fine-tuning, CNN, RNN, LSTM, Transformers., Scikit-learn, TensorFlow, PyTorch, XGBoost, LightGBM, Keras, ARIMA, Pandas, NumPy, Matplotlib., Git, Docker, FastAPI, Flask, Streamlit, Jupyter, VS Code, R Studio.\n\n[EDUCATION]\nRelevant Course Work: Applied Machine Learning, Applied Deep Learning, Probability and Statistics, Exploratory Data\nAnalysis/Visual. Additional Role: Teaching Assistant - Cloud Computing.\n\n[EDUCATION]\nBachelors of Technology in Computer Science and Engineering, CGPA: 8.83/10.0 Jul 2023\nYear: 2023\n\n[EXPERIENCE]\nData Analyst Research Intern\nPeriod: Sep 2025 - Present\n\n[EXPERIENCE]\nProgrammer Analyst\nPeriod: Jan 2024 - Jul 2025\n\nGenerate specific, relevant interview questions based on this resume."
+    },
+    {
+      "id": "resume_sp_technical_technical skills",
+      "focus_area": "technical skills",
+      "question_type": "technical",
+      "prompt": "You are an expert interviewer. Generate 5 technical interview questions focusing on the candidate's skills and projects. Focus specifically on: technical skills.\n\nHere is the candidate's resume information:\n\n[SKILLS]\nTechnical Skills: Python, C, C++, SQL, R, Bash., Hugging Face, BERT, spaCy, NLTK, LangChain, RAG, Fine-tuning, CNN, RNN, LSTM, Transformers., Scikit-learn, TensorFlow, PyTorch, XGBoost, LightGBM, Keras, ARIMA, Pandas, NumPy, Matplotlib., Git, Docker, FastAPI, Flask, Streamlit, Jupyter, VS Code, R Studio.\n\n[EDUCATION]\nRelevant Course Work: Applied Machine Learning, Applied Deep Learning, Probability and Statistics, Exploratory Data\nAnalysis/Visual. Additional Role: Teaching Assistant - Cloud Computing.\n\n[EDUCATION]\nBachelors of Technology in Computer Science and Engineering, CGPA: 8.83/10.0 Jul 2023\nYear: 2023\n\n[EXPERIENCE]\nData Analyst Research Intern\nPeriod: Sep 2025 - Present\n\n[EXPERIENCE]\nProgrammer Analyst\nPeriod: Jan 2024 - Jul 2025\n\nGenerate specific, relevant interview questions based on this resume."
+    },
+    {
+      "id": "resume_sp_behavioral_technical skills",
+      "focus_area": "technical skills",
+      "question_type": "behavioral",
+      "prompt": "You are an expert interviewer. Generate 5 behavioral interview questions based on the candidate's experience. Focus specifically on: technical skills.\n\nHere is the candidate's resume information:\n\n[SKILLS]\nTechnical Skills: Python, C, C++, SQL, R, Bash., Hugging Face, BERT, spaCy, NLTK, LangChain, RAG, Fine-tuning, CNN, RNN, LSTM, Transformers., Scikit-learn, TensorFlow, PyTorch, XGBoost, LightGBM, Keras, ARIMA, Pandas, NumPy, Matplotlib., Git, Docker, FastAPI, Flask, Streamlit, Jupyter, VS Code, R Studio.\n\n[EDUCATION]\nRelevant Course Work: Applied Machine Learning, Applied Deep Learning, Probability and Statistics, Exploratory Data\nAnalysis/Visual. Additional Role: Teaching Assistant - Cloud Computing.\n\n[EDUCATION]\nBachelors of Technology in Computer Science and Engineering, CGPA: 8.83/10.0 Jul 2023\nYear: 2023\n\n[EXPERIENCE]\nData Analyst Research Intern\nPeriod: Sep 2025 - Present\n\n[EXPERIENCE]\nProgrammer Analyst\nPeriod: Jan 2024 - Jul 2025\n\nGenerate specific, relevant interview questions based on this resume."
+    },
+    {
+      "id": "resume_sp_mixed_leadership",
+      "focus_area": "leadership",
+      "question_type": "mixed",
+      "prompt": "You are an expert interviewer. Generate 5 interview questions (mix of technical and behavioral) based on the candidate's resume. Focus specifically on: leadership.\n\nHere is the candidate's resume information:\n\n[EXPERIENCE]\nData Analyst Research Intern\nPeriod: Sep 2025 - Present\n\n[EDUCATION]\nRelevant Course Work: Applied Machine Learning, Applied Deep Learning, Probability and Statistics, Exploratory Data\nAnalysis/Visual. Additional Role: Teaching Assistant - Cloud Computing.\n\n[PROJECT]\nProject: with 95% confidence intervals.\n\n[SKILLS]\nTechnical Skills: Python, C, C++, SQL, R, Bash., Hugging Face, BERT, spaCy, NLTK, LangChain, RAG, Fine-tuning, CNN, RNN, LSTM, Transformers., Scikit-learn, TensorFlow, PyTorch, XGBoost, LightGBM, Keras, ARIMA, Pandas, NumPy, Matplotlib., Git, Docker, FastAPI, Flask, Streamlit, Jupyter, VS Code, R Studio.\n\n[EXPERIENCE]\nProgrammer Analyst\nPeriod: Jan 2024 - Jul 2025\n\nGenerate specific, relevant interview questions based on this resume."
+    },
+    {
+      "id": "resume_sp_technical_leadership",
+      "focus_area": "leadership",
+      "question_type": "technical",
+      "prompt": "You are an expert interviewer. Generate 5 technical interview questions focusing on the candidate's skills and projects. Focus specifically on: leadership.\n\nHere is the candidate's resume information:\n\n[EXPERIENCE]\nData Analyst Research Intern\nPeriod: Sep 2025 - Present\n\n[EDUCATION]\nRelevant Course Work: Applied Machine Learning, Applied Deep Learning, Probability and Statistics, Exploratory Data\nAnalysis/Visual. Additional Role: Teaching Assistant - Cloud Computing.\n\n[PROJECT]\nProject: with 95% confidence intervals.\n\n[SKILLS]\nTechnical Skills: Python, C, C++, SQL, R, Bash., Hugging Face, BERT, spaCy, NLTK, LangChain, RAG, Fine-tuning, CNN, RNN, LSTM, Transformers., Scikit-learn, TensorFlow, PyTorch, XGBoost, LightGBM, Keras, ARIMA, Pandas, NumPy, Matplotlib., Git, Docker, FastAPI, Flask, Streamlit, Jupyter, VS Code, R Studio.\n\n[EXPERIENCE]\nProgrammer Analyst\nPeriod: Jan 2024 - Jul 2025\n\nGenerate specific, relevant interview questions based on this resume."
+    },
+    {
+      "id": "resume_sp_behavioral_leadership",
+      "focus_area": "leadership",
+      "question_type": "behavioral",
+      "prompt": "You are an expert interviewer. Generate 5 behavioral interview questions based on the candidate's experience. Focus specifically on: leadership.\n\nHere is the candidate's resume information:\n\n[EXPERIENCE]\nData Analyst Research Intern\nPeriod: Sep 2025 - Present\n\n[EDUCATION]\nRelevant Course Work: Applied Machine Learning, Applied Deep Learning, Probability and Statistics, Exploratory Data\nAnalysis/Visual. Additional Role: Teaching Assistant - Cloud Computing.\n\n[PROJECT]\nProject: with 95% confidence intervals.\n\n[SKILLS]\nTechnical Skills: Python, C, C++, SQL, R, Bash., Hugging Face, BERT, spaCy, NLTK, LangChain, RAG, Fine-tuning, CNN, RNN, LSTM, Transformers., Scikit-learn, TensorFlow, PyTorch, XGBoost, LightGBM, Keras, ARIMA, Pandas, NumPy, Matplotlib., Git, Docker, FastAPI, Flask, Streamlit, Jupyter, VS Code, R Studio.\n\n[EXPERIENCE]\nProgrammer Analyst\nPeriod: Jan 2024 - Jul 2025\n\nGenerate specific, relevant interview questions based on this resume."
+    },
+    {
+      "id": "resume_sp_mixed_projects",
+      "focus_area": "projects",
+      "question_type": "mixed",
+      "prompt": "You are an expert interviewer. Generate 5 interview questions (mix of technical and behavioral) based on the candidate's resume. Focus specifically on: projects.\n\nHere is the candidate's resume information:\n\n[EDUCATION]\nRelevant Course Work: Applied Machine Learning, Applied Deep Learning, Probability and Statistics, Exploratory Data\nAnalysis/Visual. Additional Role: Teaching Assistant - Cloud Computing.\n\n[SKILLS]\nTechnical Skills: Python, C, C++, SQL, R, Bash., Hugging Face, BERT, spaCy, NLTK, LangChain, RAG, Fine-tuning, CNN, RNN, LSTM, Transformers., Scikit-learn, TensorFlow, PyTorch, XGBoost, LightGBM, Keras, ARIMA, Pandas, NumPy, Matplotlib., Git, Docker, FastAPI, Flask, Streamlit, Jupyter, VS Code, R Studio.\n\n[PROJECT]\nProject: with 95% confidence intervals.\n\n[EXPERIENCE]\nData Analyst Research Intern\nPeriod: Sep 2025 - Present\n\n[EXPERIENCE]\nProgrammer Analyst\nPeriod: Jan 2024 - Jul 2025\n\nGenerate specific, relevant interview questions based on this resume."
+    },
+    {
+      "id": "resume_sp_technical_projects",
+      "focus_area": "projects",
+      "question_type": "technical",
+      "prompt": "You are an expert interviewer. Generate 5 technical interview questions focusing on the candidate's skills and projects. Focus specifically on: projects.\n\nHere is the candidate's resume information:\n\n[EDUCATION]\nRelevant Course Work: Applied Machine Learning, Applied Deep Learning, Probability and Statistics, Exploratory Data\nAnalysis/Visual. Additional Role: Teaching Assistant - Cloud Computing.\n\n[SKILLS]\nTechnical Skills: Python, C, C++, SQL, R, Bash., Hugging Face, BERT, spaCy, NLTK, LangChain, RAG, Fine-tuning, CNN, RNN, LSTM, Transformers., Scikit-learn, TensorFlow, PyTorch, XGBoost, LightGBM, Keras, ARIMA, Pandas, NumPy, Matplotlib., Git, Docker, FastAPI, Flask, Streamlit, Jupyter, VS Code, R Studio.\n\n[PROJECT]\nProject: with 95% confidence intervals.\n\n[EXPERIENCE]\nData Analyst Research Intern\nPeriod: Sep 2025 - Present\n\n[EXPERIENCE]\nProgrammer Analyst\nPeriod: Jan 2024 - Jul 2025\n\nGenerate specific, relevant interview questions based on this resume."
+    },
+    {
+      "id": "resume_sp_behavioral_projects",
+      "focus_area": "projects",
+      "question_type": "behavioral",
+      "prompt": "You are an expert interviewer. Generate 5 behavioral interview questions based on the candidate's experience. Focus specifically on: projects.\n\nHere is the candidate's resume information:\n\n[EDUCATION]\nRelevant Course Work: Applied Machine Learning, Applied Deep Learning, Probability and Statistics, Exploratory Data\nAnalysis/Visual. Additional Role: Teaching Assistant - Cloud Computing.\n\n[SKILLS]\nTechnical Skills: Python, C, C++, SQL, R, Bash., Hugging Face, BERT, spaCy, NLTK, LangChain, RAG, Fine-tuning, CNN, RNN, LSTM, Transformers., Scikit-learn, TensorFlow, PyTorch, XGBoost, LightGBM, Keras, ARIMA, Pandas, NumPy, Matplotlib., Git, Docker, FastAPI, Flask, Streamlit, Jupyter, VS Code, R Studio.\n\n[PROJECT]\nProject: with 95% confidence intervals.\n\n[EXPERIENCE]\nData Analyst Research Intern\nPeriod: Sep 2025 - Present\n\n[EXPERIENCE]\nProgrammer Analyst\nPeriod: Jan 2024 - Jul 2025\n\nGenerate specific, relevant interview questions based on this resume."
+    }
+  ]
+}

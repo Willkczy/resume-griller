@@ -1,0 +1,36 @@
+JOHN SMITH
+Software Engineer
+Email: john.smith@email.com | Phone: (555) 123-4567
+LinkedIn: linkedin.com/in/johnsmith | GitHub: github.com/johnsmith
+
+SUMMARY
+Experienced software engineer with 5 years of expertise in full-stack development,
+specializing in Python, React, and cloud technologies.
+
+TECHNICAL SKILLS
+Languages: Python, JavaScript, TypeScript, Java, SQL
+Frameworks: React, Node.js, Django, FastAPI
+Cloud: AWS (EC2, S3, Lambda), Docker, Kubernetes
+Databases: PostgreSQL, MongoDB, Redis
+Tools: Git, Jenkins, Terraform, Linux
+
+PROFESSIONAL EXPERIENCE
+
+Senior Software Engineer | TechCorp Inc. | Jan 2022 - Present
+- Led development of microservices architecture serving 2M daily users
+- Reduced API latency by 40% through Redis caching implementation
+- Mentored team of 4 junior developers
+
+Software Engineer | StartupXYZ | Jun 2019 - Dec 2021
+- Built real-time notification system using WebSockets
+- Developed CI/CD pipeline reducing deployment time by 60%
+- Implemented OAuth2 authentication system
+
+EDUCATION
+Bachelor of Science in Computer Science
+University of California, Berkeley | 2019
+GPA: 3.7/4.0
+
+PROJECTS
+E-commerce Platform: Built scalable platform handling 10K concurrent users
+Open Source CLI Tool: Created Python CLI with 500+ GitHub stars
