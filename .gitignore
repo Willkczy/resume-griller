@@ -1,0 +1,37 @@
+# --- Security (Never Upload) ---
+.env
+.env.*
+!.env.example
+
+# --- Python Cache ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Virtual Environment ---
+.venv/
+venv/
+env/
+
+# --- Mac system files---
+.DS_Store
+
+*.egg-info/
+.eggs/
+dist/
+build/
+develop-eggs/
+lib/
+lib64/
+
+# --- Database and data ---
+*.db
+*.sqlite3
+data/uploads/
+data/chromadb/
+
+# data/
+
+# --- IDE Settings ---
+.idea/
+.vscode/
