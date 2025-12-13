@@ -18,6 +18,8 @@ from backend.app.config import settings
 from backend.app.models.schemas import HealthCheck
 from backend.app.api.routes import resume
 
+from backend.app.api.routes import resume, session
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -61,6 +63,7 @@ app.add_middleware(
 
 # Include API routers
 app.include_router(resume.router, prefix=settings.API_V1_PREFIX)
+app.include_router(session.router, prefix=settings.API_V1_PREFIX) 
 
 
 # ============== Health Check ==============
