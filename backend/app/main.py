@@ -18,7 +18,7 @@ from backend.app.config import settings
 from backend.app.models.schemas import HealthCheck
 from backend.app.api.routes import resume
 
-from backend.app.api.routes import resume, session, websocket
+from backend.app.api.routes import resume, session, websocket, voice
 
 
 @asynccontextmanager
@@ -64,6 +64,7 @@ app.add_middleware(
 # Include API routers
 app.include_router(resume.router, prefix=settings.API_V1_PREFIX)
 app.include_router(session.router, prefix=settings.API_V1_PREFIX) 
+app.include_router(voice.router, prefix=settings.API_V1_PREFIX)
 app.include_router(websocket.router)
 
 

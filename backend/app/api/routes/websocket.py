@@ -10,6 +10,8 @@ from datetime import datetime
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, status
 from fastapi.websockets import WebSocketState
 
+from backend.app.config import settings
+
 from backend.app.db.session_store import (
     InterviewSession,
     SessionStatus,
@@ -20,6 +22,8 @@ from backend.app.db.session_store import (
 from backend.app.core.interview_agent import InterviewAgent, ResponseType
 from backend.app.api.deps import get_retriever, get_llm
 from backend.app.services.llm_service import BaseLLMService
+from backend.app.services.stt_service import get_stt_service
+from backend.app.services.tts_service import get_tts_service
 from rag.retriever import InterviewRetriever
 
 
@@ -32,7 +36,8 @@ class WSMessageType:
     """WebSocket message types."""
     # Client -> Server
     START = "start"           # Start interview
-    ANSWER = "answer"         # Submit answer
+    ANSWER = "answer"         # Submit text answer
+    ANSWER_AUDIO = "answer_audio" # Submit audio answer (Base64)
     SKIP = "skip"             # Skip question
     END = "end"               # End interview
     PING = "ping"             # Keep-alive ping
@@ -45,7 +50,7 @@ class WSMessageType:
     ERROR = "error"           # Error message
     PONG = "pong"             # Keep-alive pong
     CONNECTED = "connected"   # Connection established
-    STATUS = "status"         # Status update
+    TRANSCRIPT = "transcript" # STT result (what the AI heard)
 
 
 class ConnectionManager:
@@ -104,6 +109,28 @@ def create_ws_message(
         message["error"] = error
     
     return message
+
+# ============== Voice Helper Functions ==============
+
+async def generate_voice_response(text: str) -> Optional[str]:
+    """
+    Generate TTS audio for the response text.
+    Returns Base64 audio string or None if failed/disabled.
+    """
+    if not settings.VOICE_ENABLED:
+        return None
+        
+    try:
+        tts = get_tts_service()
+        # Ensure we don't try to speak empty text
+        if not text or not text.strip():
+            return None
+            
+        result = await tts.synthesize(text)
+        return result.audio_base64
+    except Exception as e:
+        print(f"TTS Generation failed: {e}")
+        return None
 
 
 # ============== WebSocket Endpoint ==============
@@ -195,32 +222,83 @@ async def interview_websocket(
                     error="Session not found"
                 ))
                 break
-            
-            # Handle message types
+
+            # --- Handle Ping ---
             if msg_type == WSMessageType.PING:
                 await websocket.send_json(create_ws_message(
                     msg_type=WSMessageType.PONG,
                     content="pong"
                 ))
+                continue
+
+            # --- Handle Audio Input (STT) ---
+            if msg_type == WSMessageType.ANSWER_AUDIO:
+                if not settings.VOICE_ENABLED:
+                    await websocket.send_json(create_ws_message(
+                        msg_type=WSMessageType.ERROR,
+                        error="Voice services disabled"
+                    ))
+                    continue
+                
+                try:
+                    # 1. Transcribe Audio
+                    stt = get_stt_service()
+                    transcription = await stt.transcribe_base64(content)
+                    text_answer = transcription.text
+                    
+                    # 2. Send Transcript back to client (User Experience)
+                    await websocket.send_json(create_ws_message(
+                        msg_type=WSMessageType.TRANSCRIPT,
+                        content=text_answer,
+                        data={"confidence": transcription.confidence}
+                    ))
+                    
+                    # 3. Treat as normal answer
+                    msg_type = WSMessageType.ANSWER
+                    content = text_answer
+                    
+                except Exception as e:
+                    print(f"STT Error: {e}")
+                    await websocket.send_json(create_ws_message(
+                        msg_type=WSMessageType.ERROR,
+                        error=f"Transcription failed: {str(e)}"
+                    ))
+                    continue
+
+            # --- Handle Text Logic ---
             
-            elif msg_type == WSMessageType.START:
-                response = await handle_start(agent, session, message)
-                await websocket.send_json(response)
+            if msg_type == WSMessageType.START:
+                response_msg = await handle_start(agent, session, message)
+                # Attach Audio
+                audio = await generate_voice_response(response_msg.get("content"))
+                if audio:
+                    response_msg["audio_base64"] = audio
+                await websocket.send_json(response_msg)
             
             elif msg_type == WSMessageType.ANSWER:
-                response = await handle_answer(agent, session, content)
-                await websocket.send_json(response)
+                response_msg = await handle_answer(agent, session, content)
+                # Attach Audio
+                audio = await generate_voice_response(response_msg.get("content"))
+                if audio:
+                    response_msg["audio_base64"] = audio
+                await websocket.send_json(response_msg)
             
             elif msg_type == WSMessageType.SKIP:
-                response = await handle_skip(agent, session)
-                await websocket.send_json(response)
+                response_msg = await handle_skip(agent, session)
+                # Attach Audio
+                audio = await generate_voice_response(response_msg.get("content"))
+                if audio:
+                    response_msg["audio_base64"] = audio
+                await websocket.send_json(response_msg)
             
             elif msg_type == WSMessageType.END:
-                response = await handle_end(agent, session)
-                await websocket.send_json(response)
-                break  # Close connection after ending
+                response_msg = await handle_end(agent, session)
+                # Usually no audio for end summary unless desired
+                await websocket.send_json(response_msg)
+                break
             
-            else:
+            # If msg_type was unknown (and not handled by audio logic)
+            elif msg_type not in [WSMessageType.START, WSMessageType.ANSWER, WSMessageType.SKIP, WSMessageType.END]:
                 await websocket.send_json(create_ws_message(
                     msg_type=WSMessageType.ERROR,
                     error=f"Unknown message type: {msg_type}"
