@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interview WebSocket Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 { color: #333; }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        button.danger { background: #dc3545; }
+        button.danger:hover { background: #c82333; }
+        button.success { background: #28a745; }
+        button.success:hover { background: #218838; }
+        button.warning { background: #ffc107; color: #333; }
+        button.warning:hover { background: #e0a800; }
+        #status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        #status.connected { background: #d4edda; color: #155724; }
+        #status.disconnected { background: #f8d7da; color: #721c24; }
+        #status.connecting { background: #fff3cd; color: #856404; }
+        #messages {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 4px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .message.sent { background: #264f78; }
+        .message.received { background: #2d2d2d; }
+        .message.error { background: #5a1d1d; color: #f8d7da; }
+        .message .type { 
+            color: #569cd6; 
+            font-weight: bold;
+        }
+        .message .time {
+            color: #6a9955;
+            font-size: 11px;
+        }
+        .current-question {
+            background: #e7f3ff;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 0 4px 4px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎤 Interview WebSocket Test</h1>
+    
+    <div class="container">
+        <h3>1. Connect to Session</h3>
+        <div class="form-group">
+            <label>Session ID:</label>
+            <input type="text" id="sessionId" placeholder="sess_xxxxxxxxxxxx">
+        </div>
+        <button id="connectBtn" class="success">Connect</button>
+        <button id="disconnectBtn" class="danger" disabled>Disconnect</button>
+        <div id="status" class="disconnected">Disconnected</div>
+    </div>
+    
+    <div class="container">
+        <h3>2. Interview Controls</h3>
+        <button id="startBtn" disabled>▶️ Start Interview</button>
+        <button id="skipBtn" class="warning" disabled>⏭️ Skip Question</button>
+        <button id="endBtn" class="danger" disabled>⏹️ End Interview</button>
+    </div>
+    
+    <div class="container">
+        <h3>3. Current Question</h3>
+        <div id="currentQuestion" class="current-question">
+            No question yet. Connect and start the interview.
+        </div>
+    </div>
+    
+    <div class="container">
+        <h3>4. Submit Answer</h3>
+        <div class="form-group">
+            <label>Your Answer:</label>
+            <textarea id="answerInput" placeholder="Type your answer here..."></textarea>
+        </div>
+        <button id="sendAnswerBtn" disabled>📤 Send Answer</button>
+    </div>
+    
+    <div class="container">
+        <h3>5. Message Log</h3>
+        <div id="messages"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        
+        const sessionIdInput = document.getElementById('sessionId');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const startBtn = document.getElementById('startBtn');
+        const skipBtn = document.getElementById('skipBtn');
+        const endBtn = document.getElementById('endBtn');
+        const answerInput = document.getElementById('answerInput');
+        const sendAnswerBtn = document.getElementById('sendAnswerBtn');
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        const currentQuestionDiv = document.getElementById('currentQuestion');
+        
+        function addMessage(type, data, direction = 'received') {
+            const div = document.createElement('div');
+            div.className = `message ${direction} ${type === 'error' ? 'error' : ''}`;
+            
+            const time = new Date().toLocaleTimeString();
+            div.innerHTML = `
+                <span class="time">[${time}]</span>
+                <span class="type">${direction === 'sent' ? '→' : '←'} ${type}</span>
+                <pre>${JSON.stringify(data, null, 2)}</pre>
+            `;
+            
+            messagesDiv.appendChild(div);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        function updateStatus(status, text) {
+            statusDiv.className = status;
+            statusDiv.textContent = text;
+        }
+        
+        function setControlsEnabled(enabled) {
+            startBtn.disabled = !enabled;
+            skipBtn.disabled = !enabled;
+            endBtn.disabled = !enabled;
+            sendAnswerBtn.disabled = !enabled;
+        }
+        
+        connectBtn.onclick = () => {
+            const sessionId = sessionIdInput.value.trim();
+            if (!sessionId) {
+                alert('Please enter a session ID');
+                return;
+            }
+            
+            updateStatus('connecting', 'Connecting...');
+            
+            ws = new WebSocket(`ws://localhost:8000/ws/interview/${sessionId}`);
+            
+            ws.onopen = () => {
+                updateStatus('connected', 'Connected');
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                setControlsEnabled(true);
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                addMessage(data.type, data, 'received');
+                
+                // Update current question display
+                if (data.type === 'question' || data.type === 'follow_up') {
+                    currentQuestionDiv.innerHTML = `
+                        <strong>${data.type === 'follow_up' ? '🔄 Follow-up' : '❓ Question'} 
+                        ${data.data?.question_number || ''}/${data.data?.total_questions || ''}:</strong>
+                        <p>${data.content}</p>
+                    `;
+                } else if (data.type === 'complete') {
+                    currentQuestionDiv.innerHTML = `
+                        <strong>✅ Interview Complete</strong>
+                        <p>${data.content}</p>
+                    `;
+                    setControlsEnabled(false);
+                }
+            };
+            
+            ws.onclose = () => {
+                updateStatus('disconnected', 'Disconnected');
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                setControlsEnabled(false);
+                ws = null;
+            };
+            
+            ws.onerror = (error) => {
+                addMessage('error', { error: 'WebSocket error' }, 'received');
+            };
+        };
+        
+        disconnectBtn.onclick = () => {
+            if (ws) {
+                ws.close();
+            }
+        };
+        
+        function sendMessage(type, content = '', data = {}) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                alert('Not connected');
+                return;
+            }
+            
+            const message = { type, content, data };
+            ws.send(JSON.stringify(message));
+            addMessage(type, message, 'sent');
+        }
+        
+        startBtn.onclick = () => sendMessage('start', '', { num_questions: 3 });
+        skipBtn.onclick = () => sendMessage('skip');
+        endBtn.onclick = () => sendMessage('end');
+        
+        sendAnswerBtn.onclick = () => {
+            const answer = answerInput.value.trim();
+            if (!answer) {
+                alert('Please enter an answer');
+                return;
+            }
+            sendMessage('answer', answer);
+            answerInput.value = '';
+        };
+        
+        // Allow Enter to send answer (Shift+Enter for new line)
+        answerInput.onkeydown = (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendAnswerBtn.click();
+            }
+        };
+    </script>
+</body>
+</html>
