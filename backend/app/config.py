@@ -37,6 +37,26 @@ class Settings(BaseSettings):
     LOCAL_MODEL_BASE: str = "mistralai/Mistral-7B-Instruct-v0.2"
     LOCAL_MODEL_LORA: str = "shubhampareek/interview-coach-lora"
     LOCAL_MODEL_DEVICE: Optional[str] = None  # auto-detect if None
+
+    # ============== Voice Services (NEW) ==============
+    VOICE_ENABLED: bool = True
+    
+    # STT (Speech-to-Text) - Deepgram
+    STT_PROVIDER: Literal["deepgram"] = "deepgram"
+    DEEPGRAM_API_KEY: Optional[str] = None
+    DEEPGRAM_MODEL: str = "nova-2"  # nova-2 is the latest model
+    DEEPGRAM_LANGUAGE: str = "en"
+    
+    # TTS (Text-to-Speech) - ElevenLabs
+    TTS_PROVIDER: Literal["elevenlabs"] = "elevenlabs"
+    ELEVENLABS_API_KEY: Optional[str] = None
+    ELEVENLABS_VOICE_ID: str = "21m00Tcm4TlvDq8ikWAM"  # Rachel voice
+    ELEVENLABS_MODEL: str = "eleven_flash_v2"
+    
+    # Voice Settings
+    VOICE_SAMPLE_RATE: int = 16000  # 16kHz for STT
+    VOICE_CHANNELS: int = 1  # Mono
+
     
     # RAG settings
     CHROMA_PERSIST_DIR: str = "./data/chromadb"
