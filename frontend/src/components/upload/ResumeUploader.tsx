@@ -4,7 +4,7 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Upload, FileText, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Upload, FileText, Loader2, CheckCircle, AlertCircle, Video, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { uploadResume, createSession } from '@/lib/api';
@@ -12,6 +12,7 @@ import type { InterviewMode, ResumeUploadResponse } from '@/types';
 import { cn } from '@/lib/utils';
 
 type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
+type UIMode = 'video' | 'chat';
 
 export function ResumeUploader() {
   const router = useRouter();
@@ -21,6 +22,7 @@ export function ResumeUploader() {
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [selectedMode, setSelectedMode] = useState<InterviewMode>('mixed');
+  const [selectedUIMode, setSelectedUIMode] = useState<UIMode>('video');
   const [numQuestions, setNumQuestions] = useState(5);
   const [isStarting, setIsStarting] = useState(false);
 
@@ -37,7 +39,7 @@ export function ResumeUploader() {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
+
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile && (droppedFile.type === 'application/pdf' || droppedFile.name.endsWith('.txt'))) {
       setFile(droppedFile);
@@ -86,7 +88,7 @@ export function ResumeUploader() {
 
       const sessionId = response.metadata?.session_id;
       if (sessionId) {
-        router.push(`/interview/${sessionId}`);
+        router.push(`/interview/${sessionId}?mode=${selectedUIMode}`);
       } else {
         throw new Error('No session ID returned');
       }
@@ -191,9 +193,46 @@ export function ResumeUploader() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Mode Selection */}
+            {/* UI Mode Selection */}
             <div>
-              <label className="text-sm font-medium mb-3 block">Interview Mode</label>
+              <label className="text-sm font-medium mb-3 block">Interview Experience</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setSelectedUIMode('video')}
+                  className={cn(
+                    'p-4 rounded-lg border-2 text-left transition-colors',
+                    selectedUIMode === 'video'
+                      ? 'border-orange-500 bg-orange-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  )}
+                >
+                  <Video className="w-8 h-8 mb-2 text-orange-500" />
+                  <div className="font-medium">Video Mode</div>
+                  <div className="text-xs text-gray-500">
+                    Practice with webcam, like a real interview
+                  </div>
+                </button>
+                <button
+                  onClick={() => setSelectedUIMode('chat')}
+                  className={cn(
+                    'p-4 rounded-lg border-2 text-left transition-colors',
+                    selectedUIMode === 'chat'
+                      ? 'border-orange-500 bg-orange-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  )}
+                >
+                  <MessageSquare className="w-8 h-8 mb-2 text-orange-500" />
+                  <div className="font-medium">Chat Mode</div>
+                  <div className="text-xs text-gray-500">
+                    Text-based conversation style
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Interview Mode Selection */}
+            <div>
+              <label className="text-sm font-medium mb-3 block">Question Type</label>
               <div className="grid grid-cols-3 gap-3">
                 {[
                   { value: 'hr', label: 'HR', desc: 'Behavioral questions' },
