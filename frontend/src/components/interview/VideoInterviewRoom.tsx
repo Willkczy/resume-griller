@@ -60,6 +60,10 @@ export function VideoInterviewRoom({ sessionId }: VideoInterviewRoomProps) {
   const wsRef = useRef<InterviewWebSocket | null>(null);
   const isInitializedRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const voiceEnabledRef = useRef(voiceEnabled);
+  useEffect(() => {
+  voiceEnabledRef.current = voiceEnabled;
+}, [voiceEnabled]);
 
   // Initialize webcam
   useEffect(() => {
@@ -153,11 +157,14 @@ export function VideoInterviewRoom({ sessionId }: VideoInterviewRoomProps) {
             setPhase('question');
 
             // Play audio if enabled and available
-            if (voiceEnabled && message.audio_base64) {
+            if (voiceEnabledRef.current && message.audio_base64) {
               await playAudio(message.audio_base64);
             }
           } else if (message.data?.status === 'pending') {
-            websocket.startInterview(message.data?.total_questions || 5);
+            websocket.startInterview(
+              message.data?.total_questions || 5,
+              voiceEnabledRef.current
+            );
           }
           break;
 
@@ -171,7 +178,7 @@ export function VideoInterviewRoom({ sessionId }: VideoInterviewRoomProps) {
           setTranscript('');
 
           // Play audio if enabled
-          if (voiceEnabled && message.audio_base64) {
+          if (voiceEnabledRef.current && message.audio_base64) {
             await playAudio(message.audio_base64);
           }
           break;
@@ -255,7 +262,7 @@ export function VideoInterviewRoom({ sessionId }: VideoInterviewRoomProps) {
           // Send to server
           if (wsRef.current) {
             setPhase('processing');
-            wsRef.current.sendAudioAnswer(audioBase64);
+            wsRef.current.sendAudioAnswer(audioBase64, voiceEnabledRef.current);
           }
         };
         reader.readAsDataURL(audioBlob);
@@ -296,7 +303,7 @@ export function VideoInterviewRoom({ sessionId }: VideoInterviewRoomProps) {
     if (!wsRef.current || phase === 'processing') return;
     stopAudio();
     setPhase('processing');
-    wsRef.current.skipQuestion();
+    wsRef.current.skipQuestion(voiceEnabledRef.current);
   };
 
   // End interview

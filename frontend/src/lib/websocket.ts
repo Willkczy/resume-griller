@@ -82,21 +82,21 @@ export class InterviewWebSocket {
   }
 
   // Convenience methods
-  startInterview(numQuestions: number = 5): void {
+  startInterview(numQuestions: number = 5, voiceEnabled: boolean = true): void {
     console.log('[WS] Starting interview with', numQuestions, 'questions');
-    this.send({ type: 'start', data: { num_questions: numQuestions } });
+    this.send({ type: 'start', data: { num_questions: numQuestions, voice_enabled: voiceEnabled} });
   }
 
-  sendAnswer(answer: string): void {
-    this.send({ type: 'answer', content: answer });
+  sendAnswer(answer: string, voiceEnabled: boolean = true): void {
+    this.send({ type: 'answer', content: answer, data: {voice_enabled: voiceEnabled}});
   }
 
-  sendAudioAnswer(audioBase64: string): void {
-    this.send({ type: 'answer_audio', content: audioBase64 });
+  sendAudioAnswer(audioBase64: string, voiceEnabled: boolean = true): void {
+    this.send({ type: 'answer_audio', content: audioBase64, data: {voice_enabled: voiceEnabled}});
   }
 
-  skipQuestion(): void {
-    this.send({ type: 'skip' });
+  skipQuestion(voiceEnabled: boolean = true): void {
+    this.send({ type: 'skip', data: {voice_enabled: voiceEnabled} });
   }
 
   endInterview(): void {
