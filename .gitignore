@@ -24,7 +24,49 @@ develop-eggs/
 lib/
 lib64/
 
+<<<<<<< Updated upstream
 # --- Database and data ---
+=======
+# ----- uv -----
+.uv/
+uv.lock
+
+# ----- Node.js -----
+**/node_modules
+npm-debug.log*
+yarn-debug.log*
+.pnpm-debug.log*
+
+# ----- Next.js -----
+.next/
+out/
+.vercel
+
+# ----- ML / Training -----
+ml/data/resumes/*
+ml/data/interview_qa/*
+ml/data/processed/*
+ml/models/checkpoints/*
+ml/models/exported/*
+*.pt
+*.pth
+*.bin
+*.safetensors
+wandb/
+!*.gitkeep
+
+# ----- IDEs -----
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ----- OS -----
+.DS_Store
+Thumbs.db
+
+# ----- Database -----
+>>>>>>> Stashed changes
 *.db
 *.sqlite3
 data/uploads/
