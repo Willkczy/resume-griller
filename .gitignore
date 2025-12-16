@@ -12,37 +12,22 @@ __pycache__/
 .venv/
 venv/
 env/
-
-# --- Mac system files---
-.DS_Store
-
-*.egg-info/
-.eggs/
-dist/
-build/
-develop-eggs/
-lib/
-lib64/
-
-<<<<<<< Updated upstream
-# --- Database and data ---
-=======
-# ----- uv -----
 .uv/
 uv.lock
 
-# ----- Node.js -----
+# --- Node.js / Frontend ---
 **/node_modules
 npm-debug.log*
 yarn-debug.log*
 .pnpm-debug.log*
+**/next-env.d.ts
 
-# ----- Next.js -----
+# --- Next.js ---
 .next/
 out/
 .vercel
 
-# ----- ML / Training -----
+# --- ML / Training ---
 ml/data/resumes/*
 ml/data/interview_qa/*
 ml/data/processed/*
@@ -55,25 +40,25 @@ ml/models/exported/*
 wandb/
 !*.gitkeep
 
-# ----- IDEs -----
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# ----- OS -----
-.DS_Store
-Thumbs.db
-
-# ----- Database -----
->>>>>>> Stashed changes
+# --- Database and data ---
 *.db
 *.sqlite3
 data/uploads/
 data/chromadb/
 
-# data/
-
 # --- IDE Settings ---
 .idea/
 .vscode/
+*.swp
+*.swo
+
+# --- OS System Files ---
+.DS_Store
+Thumbs.db
+*.egg-info/
+.eggs/
+dist/
+build/
+develop-eggs/
+lib/
+lib64/
