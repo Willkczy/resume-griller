@@ -83,12 +83,12 @@ class InterviewRetriever:
             n_questions: int = 5
     ) -> str:
         """
-        Build a prompt for the fine-tuned model.
+        Build a prompt for the LLM with clear question type guidance.
 
         Args:
             resume_id: ID of processed resume
             focus_area: Optional focus area
-            question_type: "technical", "behavioral", or "mixed"
+            question_type: "hr", "tech", or "mixed" (converted from mode)
             n_questions: Number of questions to generate
 
         Returns:
@@ -106,25 +106,81 @@ class InterviewRetriever:
 
         context = "\n\n".join(context_parts)
 
-        # Build instruction based on question type
-        if question_type == "technical":
-            instruction = f"Generate {n_questions} technical interview questions focusing on the candidate's skills and projects."
-        elif question_type == "behavioral":
-            instruction = f"Generate {n_questions} behavioral interview questions based on the candidate's experience."
-        else:
-            instruction = f"Generate {n_questions} interview questions (mix of technical and behavioral) based on the candidate's resume."
+        # Build DETAILED instruction based on question type
+        if question_type == "tech" or question_type == "technical":
+            instruction = f"""Generate {n_questions} TECHNICAL interview questions.
+
+    FOCUS ON:
+    - Specific technologies, frameworks, and tools mentioned in the resume
+    - Architecture and design decisions in their projects
+    - Implementation details and technical trade-offs
+    - Performance optimization and debugging approaches
+    - Code quality, testing strategies, and best practices
+    - System design and scalability considerations
+
+    QUESTION STYLE:
+    - "Walk me through the architecture of [specific project]..."
+    - "How did you implement/optimize [specific feature]..."
+    - "What technical challenges did you face in [project]..."
+    - "Why did you choose [technology] over alternatives..."
+
+    DO NOT ask behavioral or STAR-method questions."""
+
+        elif question_type == "hr" or question_type == "behavioral":
+            instruction = f"""Generate {n_questions} BEHAVIORAL (HR) interview questions using the STAR method.
+
+    FOCUS ON:
+    - Leadership and team collaboration experiences
+    - Conflict resolution and difficult situations
+    - Time management and handling pressure
+    - Communication with stakeholders
+    - Career growth, learning, and adaptability
+    - Achievements and their impact on the team/company
+
+    QUESTION STYLE:
+    - "Tell me about a time when you [situation]..."
+    - "Describe a situation where you had to [challenge]..."
+    - "Give me an example of when you [behavior]..."
+    - "How did you handle [difficult situation]..."
+
+    DO NOT ask for technical implementation details. Focus on experiences, behaviors, and soft skills."""
+
+        else:  # mixed
+            instruction = f"""Generate {n_questions} interview questions (BALANCED mix of technical and behavioral).
+
+    SPLIT: {n_questions // 2} technical + {n_questions - (n_questions // 2)} behavioral questions.
+
+    TECHNICAL QUESTIONS should ask about:
+    - Project architecture, technical decisions, implementation
+    - Specific technologies and tools used
+    - Challenges and problem-solving approaches
+
+    BEHAVIORAL QUESTIONS should ask about:
+    - Team collaboration, leadership experiences
+    - Handling difficult situations, conflict resolution
+    - Time management, communication skills
+
+    Ensure clear distinction between technical and behavioral questions."""
 
         if focus_area:
-            instruction += f" Focus specifically on: {focus_area}."
+            instruction += f"\n\nSPECIAL FOCUS: Prioritize questions related to {focus_area}."
 
-        # Format final prompt
-        prompt = f"""You are an expert interviewer. {instruction}
+        # Format final prompt with stronger guidance
+        prompt = f"""You are an expert {question_type.upper()} interviewer preparing for a rigorous mock interview.
 
-Here is the candidate's resume information:
+    {instruction}
 
-{context}
+    CANDIDATE'S RESUME:
+    {context}
 
-Generate specific, relevant interview questions based on this resume."""
+    REQUIREMENTS:
+    1. Questions must be SPECIFIC to this candidate's actual experience
+    2. Reference actual projects, technologies, or experiences from the resume
+    3. Avoid generic questions that could apply to any candidate
+    4. Each question should probe for depth and specific details
+    5. Questions should be challenging but fair
+
+    Generate exactly {n_questions} questions, numbered 1-{n_questions}."""
 
         return prompt
 
