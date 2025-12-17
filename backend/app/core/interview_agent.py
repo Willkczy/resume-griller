@@ -402,43 +402,84 @@ class InterviewAgent:
         try:
             # Build prompt using retriever
             focus_area = focus_areas[0] if focus_areas else None
+            
+            # Map mode to question_type for retriever
+            # mode can be "hr", "tech", or "mixed"
+            # retriever expects "hr", "tech", or "mixed" (same values, so direct pass)
+            
             prompt = self.retriever.build_prompt(
                 resume_id=resume_id,
                 focus_area=focus_area,
-                question_type=mode,
+                question_type=mode,  # Direct pass - values match now
                 n_questions=num_questions,
             )
             
-            system_prompt = f"""You are an expert {mode} interviewer conducting a rigorous mock interview.
+            if mode == "tech":
+                mode_description = "TECHNICAL"
+                mode_rules = """STRICT RULES FOR TECHNICAL QUESTIONS:
+✓ DO ask about: architecture, algorithms, implementation details, technical trade-offs, debugging, optimization
+✓ DO reference: specific technologies, frameworks, projects from the resume
+✗ DO NOT ask: behavioral questions, STAR situations, team dynamics, soft skills
 
-Generate exactly {num_questions} interview questions that will DEEPLY PROBE the candidate's experience.
+Example good questions:
+- "Walk me through the architecture of your Energy Forecasting System. Why did you choose LSTM over other models?"
+- "In your GKE troubleshooting role, what specific debugging methodologies did you use to achieve 45% faster resolution?"
 
-IMPORTANT GUIDELINES:
-1. Questions must be SPECIFIC to the candidate's resume content
-2. Questions should require detailed, specific answers (not yes/no)
-3. Include questions that ask for:
-   - Specific examples and situations
-   - Quantifiable results and metrics
-   - Technical decisions and trade-offs
-   - Challenges faced and how they were overcome
-   - Personal role vs team contribution
+Example BAD questions (avoid these):
+- "Tell me about a time when you worked with a difficult team member" (behavioral)
+- "How do you handle stress?" (behavioral)"""
 
-For TECHNICAL mode: Focus on technical depth, architecture decisions, implementation details
-For HR/BEHAVIORAL mode: Focus on STAR situations, leadership, conflict resolution, teamwork
-For MIXED mode: Balance both technical and behavioral questions
+            elif mode == "hr":
+                mode_description = "BEHAVIORAL/HR"
+                mode_rules = """STRICT RULES FOR BEHAVIORAL QUESTIONS:
+✓ DO ask about: experiences, situations, teamwork, leadership, conflict, challenges
+✓ DO use: "Tell me about a time...", "Describe a situation...", "Give me an example..."
+✗ DO NOT ask: technical implementation details, code, algorithms, architecture
 
-AVOID:
-- Generic questions that could apply to anyone
-- Questions that can be answered with memorized responses
-- Leading questions that suggest the answer
+Example good questions:
+- "Tell me about a time when you had to mentor new team members. What was your approach?"
+- "Describe a situation where you had to deliver bad news to a stakeholder. How did you handle it?"
 
+Example BAD questions (avoid these):
+- "How did you implement the LSTM model?" (technical)
+- "What technologies did you use?" (technical)"""
+
+            else:  # mixed
+                mode_description = "MIXED (Technical + Behavioral)"
+                mode_rules = f"""STRICT RULES FOR MIXED INTERVIEW:
+Generate exactly {num_questions // 2} TECHNICAL questions and {num_questions - (num_questions // 2)} BEHAVIORAL questions.
+
+TECHNICAL questions: architecture, implementation, debugging, trade-offs
+BEHAVIORAL questions: experiences, teamwork, challenges, leadership
+
+Clearly separate the two types - do NOT mix them in the same question."""
+
+            system_prompt = f"""You are an expert {mode_description} interviewer conducting a rigorous mock interview.
+
+{mode_rules}
+
+Generate exactly {num_questions} questions that will DEEPLY PROBE the candidate's experience.
+
+CRITICAL REQUIREMENTS:
+1. Questions MUST be SPECIFIC to this candidate's resume
+2. Reference actual projects, companies, or experiences mentioned
+3. Avoid generic questions anyone could answer
+4. Each question should require detailed, specific answers
+5. Questions should be challenging but answerable from their experience
+
+FORMAT:
 Return ONLY the questions, one per line, numbered 1 to {num_questions}.
-Do not include any other text, explanations, or formatting."""
+No explanations, no other text, no markdown formatting."""
 
+            import time
+            
+            # Add slight randomization to prevent identical questions
+            diversity_note = f"\n\n[Generation ID: {int(time.time() * 1000) % 10000}]"
+            
             response = await self.llm.generate(
-                prompt=prompt,
+                prompt=prompt + diversity_note,
                 system_prompt=system_prompt,
-                temperature=0.7,
+                temperature=0.85,  # 增加隨機性
                 max_tokens=2000,
             )
             
@@ -463,27 +504,27 @@ Do not include any other text, explanations, or formatting."""
         """Get default questions based on interview mode."""
         if mode == "tech":
             return [
-                "Can you walk me through the architecture of the most complex system you've built? What were the key technical decisions?",
-                "Tell me about a time you had to optimize performance. What was the problem and what specific improvements did you achieve?",
-                "Describe a technical challenge where your first approach didn't work. How did you pivot?",
-                "How do you approach debugging a production issue? Give me a specific example.",
-                "What's a technical decision you made that you later regretted? What did you learn?",
+                "Walk me through the architecture of the most complex system you've designed. What were the key technical decisions and their trade-offs?",
+                "Tell me about a time you had to optimize performance in a production system. What was the bottleneck and how did you identify and fix it?",
+                "Describe your approach to debugging a critical production issue. Give me a specific example with details.",
+                "What's the most challenging technical problem you've solved? Walk me through your problem-solving process.",
+                "Tell me about a time when your first technical approach didn't work. How did you pivot and what did you learn?",
             ]
         elif mode == "hr":
             return [
-                "Tell me about a time you had a significant disagreement with a teammate. How did you handle it and what was the outcome?",
-                "Describe a situation where you had to deliver results under a tight deadline. What was your approach?",
-                "Give me an example of when you had to influence someone without direct authority. What strategies did you use?",
-                "Tell me about a time you failed. What happened and what did you learn from it?",
-                "Describe a situation where you had to adapt to a significant change. How did you handle it?",
+                "Tell me about a time when you had to work with a difficult team member. How did you handle the situation and what was the outcome?",
+                "Describe a situation where you had to deliver a project under a tight deadline. What was your approach and how did you prioritize?",
+                "Give me an example of when you had to persuade someone to see things differently. What strategies did you use?",
+                "Tell me about a project that didn't go as planned. What went wrong, what did you learn, and how did you handle it?",
+                "Describe a time when you received critical feedback. How did you respond and what changes did you make?",
             ]
         else:  # mixed
             return [
-                "Walk me through your most impactful project. What was your specific role and what were the measurable outcomes?",
-                "Tell me about a technical problem you solved that required collaboration with non-technical stakeholders.",
-                "Describe a time when you had to make a difficult technical trade-off. What factors did you consider?",
-                "Give me an example of when you had to learn a new technology quickly. How did you approach it?",
-                "Tell me about a time you improved a process or system. What was the before and after?",
+                "Walk me through your most impactful project. What was your specific technical role and what were the measurable outcomes?",
+                "Tell me about a technical decision you made that required buy-in from non-technical stakeholders. How did you approach it?",
+                "Describe a time when you had to debug a critical issue under pressure. What was your technical approach and how did you manage the stress?",
+                "Give me an example of when you had to learn a new technology quickly for a project. What was your learning strategy?",
+                "Tell me about a time you improved a system or process. What technical changes did you make and what was the impact on the team?",
             ]
 
     def _parse_questions(self, response: str, expected_count: int) -> List[str]:
