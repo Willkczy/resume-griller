@@ -245,6 +245,68 @@ class GeminiService(BaseLLMService):
         for chunk in chunks:
             yield chunk
 
+class GroqService(BaseLLMService):
+    """Groq API service - Ultra fast inference with Llama models."""
+    
+    def __init__(self):
+        try:
+            from groq import AsyncGroq
+            self.client = AsyncGroq(api_key=settings.GROQ_API_KEY)
+            self.model = settings.GROQ_MODEL
+            print(f"Groq initialized with model: {self.model}")
+        except ImportError:
+            raise ImportError(
+                "groq package not installed. "
+                "Run: uv add groq"
+            )
+    
+    async def generate(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 1024,
+        temperature: float = 0.7,
+    ) -> str:
+        """Generate response using Groq."""
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        
+        return response.choices[0].message.content
+    
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 1024,
+        temperature: float = 0.7,
+    ) -> AsyncIterator[str]:
+        """Generate streaming response using Groq."""
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        
+        stream = await self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            stream=True,
+        )
+        
+        async for chunk in stream:
+            if chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+
 
 class LocalLLMService(BaseLLMService):
     """Local LoRA model service."""
@@ -334,6 +396,12 @@ class LLMServiceFactory:
                 raise ValueError("GOOGLE_API_KEY not set")
             print("Initializing Google Gemini Service")
             return GeminiService()
+        
+        elif settings.LLM_PROVIDER == "groq":
+            if not settings.GROQ_API_KEY:
+                raise ValueError("GROQ_API_KEY not set")
+            print("Initializing Groq Service")
+            return GroqService()
         
         else:
             raise ValueError(f"Unknown LLM provider: {settings.LLM_PROVIDER}")
