@@ -17,7 +17,6 @@ dependencies = [
     "langchain>=0.1.0",
     "chromadb>=0.4.0",
     "sentence-transformers>=2.2.0",
-    
     # FastAPI Backend
     "fastapi>=0.109.0",
     "uvicorn[standard]>=0.27.0",
@@ -25,18 +24,16 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
-    
     # Database
     "sqlalchemy>=2.0.0",
     "aiosqlite>=0.19.0",
-    
     # Async Support
     "httpx>=0.26.0",
     "aiofiles>=23.2.0",
-    
     # LLM API Clients
     "anthropic>=0.18.0",
     "openai>=1.12.0",
+    "groq>=0.37.1",
 ]
 
 [project.optional-dependencies]

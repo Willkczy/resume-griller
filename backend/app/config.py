@@ -23,15 +23,17 @@ class Settings(BaseSettings):
     LLM_MODE: Literal["api", "local"] = "api"  # "api" or "local"
     
     # API Mode settings (Claude / OpenAI)
-    LLM_PROVIDER: Literal["anthropic", "openai", "gemini"] = "gemini"
+    LLM_PROVIDER: Literal["anthropic", "openai", "gemini", "groq"] = "groq"
     ANTHROPIC_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
     GOOGLE_API_KEY: Optional[str] = None
+    GROQ_API_KEY: Optional[str] = None
     
     # Model names
     ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
     OPENAI_MODEL: str = "gpt-4o"
     GEMINI_MODEL: str = "gemini-2.5-flash"
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
     
     # Local Mode settings (LoRA model)
     LOCAL_MODEL_BASE: str = "mistralai/Mistral-7B-Instruct-v0.2"
