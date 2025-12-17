@@ -452,7 +452,7 @@ Be strict but fair. Most first-attempt answers should score 0.4-0.6."""
             prompt=prompt,
             system_prompt=system_prompt,
             temperature=0.2,
-            max_tokens=1000,
+            max_tokens=2000,
         )
         
         return self._parse_llm_evaluation(response, follow_up_count)
@@ -565,7 +565,32 @@ Be strict but fair. Most first-attempt answers should score 0.4-0.6."""
             
         except Exception as e:
             print(f"Failed to parse LLM evaluation: {e}")
-            raise
+            print(f"Response preview: {response[:500]}")
+            # Return safe fallback instead of raising
+            return AnswerEvaluation(
+                is_sufficient=False,
+                score=0.4,
+                detailed_scores=DetailedScores(
+                    relevancy=0.4,
+                    clarity=0.4,
+                    informativeness=0.4,
+                    specificity=0.3,
+                    quantification=0.3,
+                    depth=0.4,
+                    completeness=0.3,
+                ),
+                gap_analysis=GapAnalysis(
+                    detected_gaps=[GapType.NO_SPECIFIC_EXAMPLE],
+                    gap_details={GapType.NO_SPECIFIC_EXAMPLE: "Evaluation parsing failed"},
+                    severity=0.6,
+                    priority_gap=GapType.NO_SPECIFIC_EXAMPLE,
+                ),
+                missing_elements=["more specific details"],
+                strengths=[],
+                suggested_follow_up="Could you provide more specific details about this?",
+                reasoning="LLM evaluation parsing failed, using safe defaults",
+                follow_up_count=follow_up_count,
+            )
     
     def _fallback_evaluation(
         self,
@@ -898,7 +923,7 @@ Return ONLY the JSON."""
                 prompt=prompt,
                 system_prompt="You are verifying consistency between interview answers and resume claims.",
                 temperature=0.2,
-                max_tokens=300,
+                max_tokens=500,
             )
             
             data = self._parse_json_response(response)
