@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-4o"
     GEMINI_MODEL: str = "gemini-2.5-flash"
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
+
+    # Custom Model settings (GCP VM with vLLM)
+    CUSTOM_MODEL_ENABLED: bool = False
+    CUSTOM_MODEL_URL: str = "http://localhost:8001/v1"  # IAP tunnel endpoint
+    CUSTOM_MODEL_NAME: str = "mistralai/Mistral-7B-Instruct-v0.2"
+    CUSTOM_MODEL_TIMEOUT: int = 120  #
     
     # Local Mode settings (LoRA model)
     LOCAL_MODEL_BASE: str = "mistralai/Mistral-7B-Instruct-v0.2"

@@ -51,6 +51,7 @@ class InterviewSession:
     session_id: str
     resume_id: str
     mode: str = "mixed"  # "hr", "tech", "mixed"
+    model_type: str = "api"
     status: SessionStatus = SessionStatus.PENDING
     
     # Questions
@@ -74,6 +75,7 @@ class InterviewSession:
             "session_id": self.session_id,
             "resume_id": self.resume_id,
             "mode": self.mode,
+            "model_type": self.model_type, 
             "status": self.status.value,
             "questions": self.questions,
             "current_question_index": self.current_question_index,
@@ -142,6 +144,7 @@ class SessionStore:
         self,
         resume_id: str,
         mode: str = "mixed",
+        model_type: str = "api", 
         focus_areas: List[str] = None,
         max_follow_ups: int = 3,
     ) -> InterviewSession:
@@ -152,6 +155,7 @@ class SessionStore:
             session_id=session_id,
             resume_id=resume_id,
             mode=mode,
+            model_type=model_type,
             focus_areas=focus_areas or [],
             max_follow_ups=max_follow_ups,
         )

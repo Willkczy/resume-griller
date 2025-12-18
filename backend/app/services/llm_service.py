@@ -307,6 +307,94 @@ class GroqService(BaseLLMService):
             if chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
 
+class CustomModelService(BaseLLMService):
+    """
+    Custom LoRA model deployed on GCP VM via vLLM.
+    Uses OpenAI-compatible API format.
+    
+    Requirements:
+    - IAP tunnel must be running: 
+      gcloud compute start-iap-tunnel instance-20251217-192430 8000 \
+          --local-host-port=localhost:8001 --zone=us-east1-b
+    """
+    
+    def __init__(self):
+        try:
+            from openai import AsyncOpenAI
+            
+            self.client = AsyncOpenAI(
+                base_url=settings.CUSTOM_MODEL_URL,
+                api_key="not-needed",  # vLLM doesn't require API key
+                timeout=settings.CUSTOM_MODEL_TIMEOUT,
+            )
+            self.model = settings.CUSTOM_MODEL_NAME
+            print(f"Custom Model Service initialized")
+            print(f"  URL: {settings.CUSTOM_MODEL_URL}")
+            print(f"  Model: {self.model}")
+        except ImportError:
+            raise ImportError(
+                "openai package not installed. Run: uv add openai"
+            )
+    
+    def _format_prompt(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+        """Format prompt for Mistral Instruct model."""
+        if system_prompt:
+            return f"[INST] {system_prompt}\n\n{prompt} [/INST]"
+        else:
+            return f"[INST] {prompt} [/INST]"
+    
+    async def generate(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 1024,
+        temperature: float = 0.7,
+    ) -> str:
+        """Generate response using custom vLLM model."""
+        formatted_prompt = self._format_prompt(prompt, system_prompt)
+        
+        try:
+            response = await self.client.completions.create(
+                model=self.model,
+                prompt=formatted_prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+            
+            return response.choices[0].text.strip()
+            
+        except Exception as e:
+            print(f"Custom Model error: {e}")
+            raise
+    
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 1024,
+        temperature: float = 0.7,
+    ) -> AsyncIterator[str]:
+        """Generate streaming response using custom vLLM model."""
+        formatted_prompt = self._format_prompt(prompt, system_prompt)
+        
+        try:
+            stream = await self.client.completions.create(
+                model=self.model,
+                prompt=formatted_prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stream=True,
+            )
+            
+            async for chunk in stream:
+                if chunk.choices[0].text:
+                    yield chunk.choices[0].text
+                    
+        except Exception as e:
+            print(f"Custom Model streaming error: {e}")
+            # Fallback to non-streaming
+            full_response = await self.generate(prompt, system_prompt, max_tokens, temperature)
+            yield full_response
 
 class LocalLLMService(BaseLLMService):
     """Local LoRA model service."""
@@ -402,6 +490,12 @@ class LLMServiceFactory:
                 raise ValueError("GROQ_API_KEY not set")
             print("Initializing Groq Service")
             return GroqService()
+        
+        elif settings.LLM_PROVIDER == "custom":
+            if not settings.CUSTOM_MODEL_URL:
+                raise ValueError("CUSTOM_MODEL_URL not set")
+            print("Initializing Custom Model Service (GCP VM)")
+            return CustomModelService()
         
         else:
             raise ValueError(f"Unknown LLM provider: {settings.LLM_PROVIDER}")

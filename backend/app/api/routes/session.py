@@ -13,7 +13,7 @@ from backend.app.db.session_store import (
 )
 from backend.app.core.interview_agent import InterviewAgent, InterviewerResponse
 from backend.app.api.deps import get_retriever, get_llm
-from backend.app.services.llm_service import BaseLLMService
+from backend.app.services.llm_service import BaseLLMService, LLMServiceFactory
 from rag.retriever import InterviewRetriever
 
 from pydantic import BaseModel, Field
@@ -25,6 +25,7 @@ class SessionCreateRequest(BaseModel):
     """Request to create a new interview session."""
     resume_id: str
     mode: str = Field(default="mixed", pattern="^(hr|tech|mixed)$")
+    model_type: str = Field(default="api", pattern="^(api|custom)$")
     focus_areas: List[str] = Field(default_factory=list)
     num_questions: int = Field(default=5, ge=1, le=15)
     max_follow_ups: int = Field(default=3, ge=0, le=5)
@@ -35,6 +36,7 @@ class SessionResponse(BaseModel):
     session_id: str
     resume_id: str
     mode: str
+    model_type: str
     status: str
     current_question_index: int
     total_questions: int
@@ -74,6 +76,7 @@ class SessionDetailResponse(BaseModel):
     session_id: str
     resume_id: str
     mode: str
+    model_type: str
     status: str
     current_question: Optional[str]
     current_question_index: int
@@ -104,12 +107,40 @@ class SessionSummaryResponse(BaseModel):
 router = APIRouter(prefix="/sessions", tags=["interview sessions"])
 
 
-def get_interview_agent(
-    llm: BaseLLMService = Depends(get_llm),
-    retriever: InterviewRetriever = Depends(get_retriever),
+# ============== Helper Functions ==============
+
+def get_llm_service_for_model_type(model_type: str) -> BaseLLMService:
+    """
+    Get LLM service based on model_type.
+    
+    Args:
+        model_type: "api" for cloud APIs (Groq/Gemini), "custom" for GCP VM model
+    
+    Returns:
+        Appropriate LLM service instance
+    """
+    if model_type == "custom":
+        # Import here to avoid circular imports
+        from backend.app.services.llm_service import CustomModelService
+        try:
+            return CustomModelService()
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Custom model not available: {str(e)}. Make sure IAP tunnel is running.",
+            )
+    else:
+        # Use default API provider (Groq/Gemini/etc based on .env)
+        return LLMServiceFactory.get_service()
+
+
+def create_interview_agent(
+    model_type: str,
+    retriever: InterviewRetriever,
 ) -> InterviewAgent:
-    """Get InterviewAgent instance."""
-    return InterviewAgent(llm_service=llm, retriever=retriever)
+    """Create InterviewAgent with the appropriate LLM service."""
+    llm_service = get_llm_service_for_model_type(model_type)
+    return InterviewAgent(llm_service=llm_service, retriever=retriever)
 
 
 # ============== Endpoints ==============
@@ -118,34 +149,43 @@ def get_interview_agent(
 async def create_session(
     request: SessionCreateRequest,
     session_store: SessionStore = Depends(get_session_store),
-    agent: InterviewAgent = Depends(get_interview_agent),
+    retriever: InterviewRetriever = Depends(get_retriever),
 ):
     """
     Create a new interview session and start the interview.
+    
+    Args:
+        request.model_type: "api" for cloud LLM, "custom" for fine-tuned model
     
     Returns the first question.
     """
     # Verify resume exists (check if we have chunks for it)
     try:
-        summary = agent.retriever.get_resume_summary(request.resume_id)
+        summary = retriever.get_resume_summary(request.resume_id)
         if summary.get("total_chunks", 0) == 0:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Resume not found: {request.resume_id}",
             )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Resume not found: {request.resume_id}",
         )
     
-    # Create session
+    # Create session with model_type
     session = session_store.create(
         resume_id=request.resume_id,
         mode=request.mode,
+        model_type=request.model_type,
         focus_areas=request.focus_areas,
         max_follow_ups=request.max_follow_ups,
     )
+    
+    # Create agent with appropriate LLM based on model_type
+    agent = create_interview_agent(request.model_type, retriever)
     
     # Start interview (generates questions and returns first one)
     response = await agent.start_interview(
@@ -159,7 +199,10 @@ async def create_session(
         question_number=response.question_number,
         total_questions=response.total_questions,
         evaluation=response.evaluation,
-        metadata={"session_id": session.session_id},
+        metadata={
+            "session_id": session.session_id,
+            "model_type": session.model_type,
+        },
     )
 
 
@@ -176,6 +219,7 @@ async def list_sessions(
             session_id=s.session_id,
             resume_id=s.resume_id,
             mode=s.mode,
+            model_type=s.model_type,
             status=s.status.value,
             current_question_index=s.current_question_index,
             total_questions=len(s.questions),
@@ -205,6 +249,7 @@ async def get_session(
         session_id=session.session_id,
         resume_id=session.resume_id,
         mode=session.mode,
+        model_type=session.model_type,
         status=session.status.value,
         current_question=session.current_question,
         current_question_index=session.current_question_index,
@@ -230,7 +275,7 @@ async def submit_answer(
     session_id: str,
     request: AnswerRequest,
     session_store: SessionStore = Depends(get_session_store),
-    agent: InterviewAgent = Depends(get_interview_agent),
+    retriever: InterviewRetriever = Depends(get_retriever),
 ):
     """
     Submit an answer to the current question.
@@ -254,6 +299,9 @@ async def submit_answer(
             detail=f"Session is not in progress. Status: {session.status.value}",
         )
     
+    # Create agent with the same model_type as the session
+    agent = create_interview_agent(session.model_type, retriever)
+    
     # Process the answer
     response = await agent.process_answer(
         session=session,
@@ -274,7 +322,7 @@ async def submit_answer(
 async def skip_question(
     session_id: str,
     session_store: SessionStore = Depends(get_session_store),
-    agent: InterviewAgent = Depends(get_interview_agent),
+    retriever: InterviewRetriever = Depends(get_retriever),
 ):
     """Skip the current question and move to the next one."""
     session = session_store.get(session_id)
@@ -291,6 +339,9 @@ async def skip_question(
             detail=f"Session is not in progress. Status: {session.status.value}",
         )
     
+    # Create agent with the same model_type as the session
+    agent = create_interview_agent(session.model_type, retriever)
+    
     response = await agent.skip_question(session=session)
     
     return InterviewResponseModel(
@@ -306,7 +357,7 @@ async def skip_question(
 async def end_session(
     session_id: str,
     session_store: SessionStore = Depends(get_session_store),
-    agent: InterviewAgent = Depends(get_interview_agent),
+    retriever: InterviewRetriever = Depends(get_retriever),
 ):
     """End the interview session early."""
     session = session_store.get(session_id)
@@ -316,6 +367,9 @@ async def end_session(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session not found: {session_id}",
         )
+    
+    # Create agent with the same model_type as the session
+    agent = create_interview_agent(session.model_type, retriever)
     
     response = await agent.end_interview(
         session=session,
@@ -333,7 +387,7 @@ async def end_session(
 async def get_session_summary(
     session_id: str,
     session_store: SessionStore = Depends(get_session_store),
-    agent: InterviewAgent = Depends(get_interview_agent),
+    retriever: InterviewRetriever = Depends(get_retriever),
 ):
     """Get a summary of the interview session."""
     session = session_store.get(session_id)
@@ -343,6 +397,9 @@ async def get_session_summary(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session not found: {session_id}",
         )
+    
+    # Create agent with the same model_type as the session
+    agent = create_interview_agent(session.model_type, retriever)
     
     summary = await agent.get_interview_summary(session)
     
