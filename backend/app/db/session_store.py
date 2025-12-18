@@ -1,9 +1,11 @@
 """
 Session Store for Interview Sessions.
 Currently uses in-memory storage. Can be replaced with Redis/PostgreSQL later.
+
+Supports Hybrid model by storing prepared_context from preprocessing phase.
 """
 
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Any
 from datetime import datetime
 from dataclasses import dataclass, field
 from enum import Enum
@@ -51,7 +53,7 @@ class InterviewSession:
     session_id: str
     resume_id: str
     mode: str = "mixed"  # "hr", "tech", "mixed"
-    model_type: str = "api"
+    model_type: str = "api"  # "api" or "custom"
     status: SessionStatus = SessionStatus.PENDING
     
     # Questions
@@ -70,6 +72,10 @@ class InterviewSession:
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime = field(default_factory=datetime.utcnow)
     
+    # Hybrid model support: stores preprocessed context
+    # Contains: resume_summary, questions, question_contexts
+    prepared_context: Optional[Dict[str, Any]] = None
+    
     def to_dict(self) -> Dict:
         return {
             "session_id": self.session_id,
@@ -87,6 +93,7 @@ class InterviewSession:
             "updated_at": self.updated_at.isoformat(),
             "total_questions": len(self.questions),
             "questions_asked": self.current_question_index,
+            "has_prepared_context": self.prepared_context is not None,
         }
     
     @property
@@ -100,6 +107,22 @@ class InterviewSession:
     def is_complete(self) -> bool:
         """Check if all questions have been asked."""
         return self.current_question_index >= len(self.questions)
+    
+    @property
+    def current_question_context(self) -> Optional[str]:
+        """Get the prepared context for the current question (Hybrid mode)."""
+        if self.prepared_context and "question_contexts" in self.prepared_context:
+            contexts = self.prepared_context["question_contexts"]
+            if 0 <= self.current_question_index < len(contexts):
+                return contexts[self.current_question_index]
+        return None
+    
+    @property
+    def resume_summary(self) -> Optional[str]:
+        """Get the prepared resume summary (Hybrid mode)."""
+        if self.prepared_context:
+            return self.prepared_context.get("resume_summary")
+        return None
     
     def add_message(self, role: MessageRole, content: str, is_follow_up: bool = False, metadata: Dict = None):
         """Add a message to conversation."""
@@ -194,6 +217,13 @@ class SessionStore:
         return [
             s for s in self._sessions.values()
             if s.status == SessionStatus.IN_PROGRESS
+        ]
+    
+    def get_sessions_by_model_type(self, model_type: str) -> List[InterviewSession]:
+        """Get sessions by model type."""
+        return [
+            s for s in self._sessions.values()
+            if s.model_type == model_type
         ]
 
 

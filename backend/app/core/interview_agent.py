@@ -3,6 +3,9 @@ Interview Agent for Interview Coach.
 Orchestrates the interview flow, question generation, and grilling logic.
 
 Enhanced to work with the new Mistake-Guided Grilling Engine.
+
+Note: This InterviewAgent is used for API mode (Groq/Gemini).
+      For Custom/Hybrid mode, session.py handles the flow directly.
 """
 
 from typing import Optional, List, Dict
@@ -54,6 +57,10 @@ class InterviewAgent:
     """
     Orchestrates the interview process with enhanced grilling capabilities.
     
+    Used for API mode (Groq/Gemini/OpenAI) which has full context window.
+    For Custom/Hybrid mode, session.py handles the flow directly with
+    GrillingEngine configured for compact prompts.
+    
     Responsibilities:
     - Generate questions based on resume
     - Manage interview flow
@@ -69,10 +76,20 @@ class InterviewAgent:
         llm_service: BaseLLMService,
         retriever: InterviewRetriever,
     ):
+        """
+        Initialize InterviewAgent.
+        
+        Args:
+            llm_service: LLM service for generation (API mode)
+            retriever: RAG retriever for resume context
+        """
         self.llm = llm_service
         self.retriever = retriever
+        # Standard GrillingEngine for API mode (full prompts)
         self.grilling_engine = GrillingEngine(llm_service)
         self.session_store = get_session_store()
+        
+        print(f"[InterviewAgent] Initialized for API mode")
     
     async def start_interview(
         self,
@@ -175,7 +192,7 @@ class InterviewAgent:
             follow_up_count=session.current_follow_up_count,
         )
         
-        # Optional: Check resume consistency for significant claims
+        # Check resume consistency for significant claims (first answer only)
         if resume_context and session.current_follow_up_count == 0:
             is_consistent, inconsistencies = await self.grilling_engine.check_resume_consistency(
                 answer=answer,
@@ -380,6 +397,7 @@ class InterviewAgent:
             "session_id": session.session_id,
             "resume_id": session.resume_id,
             "mode": session.mode,
+            "model_type": getattr(session, 'model_type', 'api'),
             "status": session.status.value,
             "questions_asked": questions_asked,
             "total_questions": total_questions,
@@ -403,14 +421,10 @@ class InterviewAgent:
             # Build prompt using retriever
             focus_area = focus_areas[0] if focus_areas else None
             
-            # Map mode to question_type for retriever
-            # mode can be "hr", "tech", or "mixed"
-            # retriever expects "hr", "tech", or "mixed" (same values, so direct pass)
-            
             prompt = self.retriever.build_prompt(
                 resume_id=resume_id,
                 focus_area=focus_area,
-                question_type=mode,  # Direct pass - values match now
+                question_type=mode,
                 n_questions=num_questions,
             )
             
@@ -479,7 +493,7 @@ No explanations, no other text, no markdown formatting."""
             response = await self.llm.generate(
                 prompt=prompt + diversity_note,
                 system_prompt=system_prompt,
-                temperature=0.85,  # 增加隨機性
+                temperature=0.85,
                 max_tokens=2000,
             )
             

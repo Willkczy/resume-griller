@@ -1,5 +1,7 @@
 """
 WebSocket endpoint for real-time interview communication.
+
+Supports both API mode and Custom/Hybrid mode.
 """
 
 import json
@@ -20,8 +22,13 @@ from backend.app.db.session_store import (
     get_session_store,
 )
 from backend.app.core.interview_agent import InterviewAgent, ResponseType
+from backend.app.core.grilling_engine import GrillingEngine
 from backend.app.api.deps import get_retriever, get_llm
-from backend.app.services.llm_service import BaseLLMService
+from backend.app.services.llm_service import (
+    BaseLLMService,
+    LLMServiceFactory,
+    HybridModelService,
+)
 from backend.app.services.stt_service import get_stt_service
 from backend.app.services.tts_service import get_tts_service
 from rag.retriever import InterviewRetriever
@@ -133,6 +140,165 @@ async def generate_voice_response(text: str) -> Optional[str]:
         return None
 
 
+# ============== Helper Functions for Model Type ==============
+
+def get_hybrid_service() -> HybridModelService:
+    """Get the hybrid model service instance."""
+    return LLMServiceFactory.get_hybrid_service()
+
+
+def create_interview_agent_for_session(session: InterviewSession) -> Optional[InterviewAgent]:
+    """
+    Create InterviewAgent based on session's model_type.
+    
+    Returns None for custom mode (handled separately).
+    """
+    if session.model_type == "custom":
+        # Custom mode uses _process_answer_hybrid, not InterviewAgent
+        return None
+    
+    # API mode: create standard InterviewAgent
+    from backend.app.services.llm_service import get_llm_service
+    from backend.app.api.deps import get_retriever
+    
+    llm = get_llm_service()
+    retriever = get_retriever()
+    return InterviewAgent(llm_service=llm, retriever=retriever)
+
+
+async def process_answer_hybrid(
+    session: InterviewSession,
+    answer: str,
+    session_store: SessionStore,
+) -> dict:
+    """
+    Process answer using Hybrid approach (Custom Model execution).
+    
+    Uses GrillingEngine with Custom Model for evaluation and follow-up generation.
+    Returns a WebSocket-formatted message dict.
+    """
+    current_question = session.current_question
+    if not current_question:
+        return create_ws_message(
+            msg_type=WSMessageType.COMPLETE,
+            content="Interview complete! Thank you for your responses.",
+        )
+    
+    # Add answer to conversation
+    session.add_message(role=MessageRole.CANDIDATE, content=answer)
+    
+    # Get hybrid service
+    hybrid_service = get_hybrid_service()
+    
+    # Restore prepared context if needed
+    prepared_context = {}
+    if hasattr(session, 'prepared_context') and session.prepared_context:
+        prepared_context = session.prepared_context
+        hybrid_service.set_prepared_context(session.session_id, prepared_context)
+    
+    # Create GrillingEngine with Custom Model and prepared context
+    grilling_engine = GrillingEngine(
+        llm_service=hybrid_service.interviewer,  # Use Custom Model
+        model_type="custom",  # Enables compact prompts
+        prepared_context=prepared_context,
+    )
+    
+    # Build conversation history
+    conversation_history = [
+        {"role": m.role.value, "content": m.content, "is_follow_up": m.is_follow_up}
+        for m in session.conversation[-10:]
+    ]
+    
+    # Evaluate answer using GrillingEngine (with Custom Model)
+    evaluation = await grilling_engine.evaluate_answer(
+        question=current_question,
+        answer=answer,
+        resume_context="",  # Not needed - using prepared_context
+        question_type=session.mode,
+        conversation_history=conversation_history,
+        follow_up_count=session.current_follow_up_count,
+        question_index=session.current_question_index,
+    )
+    
+    # Use GrillingEngine's decision logic
+    should_followup = grilling_engine.should_grill(
+        evaluation=evaluation,
+        follow_up_count=session.current_follow_up_count,
+        max_follow_ups=session.max_follow_ups,
+    )
+    
+    if should_followup:
+        # Generate follow-up using GrillingEngine (with Custom Model)
+        followup = await grilling_engine.generate_follow_up(
+            question=current_question,
+            answer=answer,
+            evaluation=evaluation,
+            conversation_history=conversation_history,
+            question_type=session.mode,
+        )
+        
+        session.increment_follow_up()
+        session.add_message(
+            role=MessageRole.INTERVIEWER,
+            content=followup,
+            is_follow_up=True,
+            metadata={
+                "gap": evaluation.gap_analysis.priority_gap.value if evaluation.gap_analysis.priority_gap else None,
+                "score": evaluation.score,
+                "detected_gaps": [g.value for g in evaluation.gap_analysis.detected_gaps],
+            },
+        )
+        
+        session_store.update(session)
+        
+        return create_ws_message(
+            msg_type=WSMessageType.FOLLOW_UP,
+            content=followup,
+            data={
+                "question_number": session.current_question_index + 1,
+                "total_questions": len(session.questions),
+                "evaluation": evaluation.to_dict(),
+                "follow_up_count": session.current_follow_up_count,
+                "priority_gap": evaluation.gap_analysis.priority_gap.value if evaluation.gap_analysis.priority_gap else None,
+            }
+        )
+    
+    # Move to next question
+    next_question = session.next_question()
+    
+    if next_question is None:
+        session.status = SessionStatus.COMPLETED
+        session.add_message(role=MessageRole.SYSTEM, content="Interview completed.")
+        session_store.update(session)
+        
+        return create_ws_message(
+            msg_type=WSMessageType.COMPLETE,
+            content="Excellent! That concludes our interview. Thank you for your thoughtful responses.",
+            data={
+                "final_evaluation": evaluation.to_dict(),
+            }
+        )
+    
+    # Ask next question
+    session.add_message(
+        role=MessageRole.INTERVIEWER,
+        content=next_question,
+        metadata={"question_number": session.current_question_index + 1},
+    )
+    
+    session_store.update(session)
+    
+    return create_ws_message(
+        msg_type=WSMessageType.QUESTION,
+        content=next_question,
+        data={
+            "question_number": session.current_question_index + 1,
+            "total_questions": len(session.questions),
+            "previous_evaluation": evaluation.to_dict(),
+        }
+    )
+
+
 # ============== WebSocket Endpoint ==============
 
 @router.websocket("/ws/interview/{session_id}")
@@ -143,25 +309,7 @@ async def interview_websocket(
     """
     WebSocket endpoint for real-time interview.
     
-    Message format (Client -> Server):
-    {
-        "type": "start" | "answer" | "skip" | "end" | "ping",
-        "content": "answer text" (for answer type),
-        "data": {} (optional additional data)
-    }
-    
-    Message format (Server -> Client):
-    {
-        "type": "question" | "follow_up" | "evaluation" | "complete" | "error" | "pong" | "connected",
-        "content": "message content",
-        "timestamp": "ISO timestamp",
-        "data": {
-            "question_number": 1,
-            "total_questions": 5,
-            "evaluation": {...},
-            ...
-        }
-    }
+    Supports both API mode (InterviewAgent) and Custom mode (Hybrid).
     """
     # Get dependencies
     session_store = get_session_store()
@@ -183,6 +331,7 @@ async def interview_websocket(
             "session_id": session_id,
             "resume_id": session.resume_id,
             "mode": session.mode,
+            "model_type": session.model_type,
             "status": session.status.value,
             "current_question": session.current_question,
             "question_number": session.current_question_index + 1,
@@ -190,13 +339,14 @@ async def interview_websocket(
         }
     ))
     
-    # Create interview agent
-    from backend.app.services.llm_service import get_llm_service
-    from backend.app.api.deps import get_retriever
+    # Create interview agent based on model_type
+    # For custom mode, agent will be None and we use process_answer_hybrid
+    agent = create_interview_agent_for_session(session)
     
-    llm = get_llm_service()
-    retriever = get_retriever()
-    agent = InterviewAgent(llm_service=llm, retriever=retriever)
+    if agent:
+        print(f"[WebSocket] Using InterviewAgent for API mode")
+    else:
+        print(f"[WebSocket] Using Hybrid mode for Custom model")
     
     try:
         while True:
@@ -268,7 +418,20 @@ async def interview_websocket(
             # --- Handle Text Logic ---
             
             if msg_type == WSMessageType.START:
-                response_msg = await handle_start(agent, session, message)
+                # For custom mode with pre-generated questions, just return current question
+                if session.model_type == "custom" and session.questions:
+                    response_msg = create_ws_message(
+                        msg_type=WSMessageType.QUESTION,
+                        content=session.current_question or "No question available",
+                        data={
+                            "question_number": session.current_question_index + 1,
+                            "total_questions": len(session.questions),
+                            "status": "resumed",
+                        }
+                    )
+                else:
+                    response_msg = await handle_start(agent, session, message)
+                
                 # Attach Audio
                 audio = await generate_voice_response(response_msg.get("content"))
                 if audio:
@@ -276,7 +439,12 @@ async def interview_websocket(
                 await websocket.send_json(response_msg)
             
             elif msg_type == WSMessageType.ANSWER:
-                response_msg = await handle_answer(agent, session, content)
+                # Route to appropriate handler based on model_type
+                if session.model_type == "custom":
+                    response_msg = await handle_answer_hybrid(session, content, session_store)
+                else:
+                    response_msg = await handle_answer(agent, session, content)
+                
                 # Attach Audio
                 audio = await generate_voice_response(response_msg.get("content"))
                 if audio:
@@ -284,7 +452,12 @@ async def interview_websocket(
                 await websocket.send_json(response_msg)
             
             elif msg_type == WSMessageType.SKIP:
-                response_msg = await handle_skip(agent, session)
+                # Route to appropriate handler based on model_type
+                if session.model_type == "custom":
+                    response_msg = await handle_skip_hybrid(session, session_store)
+                else:
+                    response_msg = await handle_skip(agent, session)
+                
                 # Attach Audio
                 audio = await generate_voice_response(response_msg.get("content"))
                 if audio:
@@ -292,7 +465,10 @@ async def interview_websocket(
                 await websocket.send_json(response_msg)
             
             elif msg_type == WSMessageType.END:
-                response_msg = await handle_end(agent, session)
+                if session.model_type == "custom":
+                    response_msg = await handle_end_hybrid(session, session_store)
+                else:
+                    response_msg = await handle_end(agent, session)
                 # Usually no audio for end summary unless desired
                 await websocket.send_json(response_msg)
                 break
@@ -309,6 +485,8 @@ async def interview_websocket(
     
     except Exception as e:
         print(f"WebSocket error: {e}")
+        import traceback
+        traceback.print_exc()
         try:
             await websocket.send_json(create_ws_message(
                 msg_type=WSMessageType.ERROR,
@@ -321,14 +499,14 @@ async def interview_websocket(
         manager.disconnect(session_id)
 
 
-# ============== Message Handlers ==============
+# ============== Message Handlers (API Mode) ==============
 
 async def handle_start(
     agent: InterviewAgent,
     session: InterviewSession,
     message: dict,
 ) -> dict:
-    """Handle start interview message."""
+    """Handle start interview message (API mode)."""
     
     # Check if already started
     if session.status == SessionStatus.IN_PROGRESS and session.questions:
@@ -372,7 +550,7 @@ async def handle_answer(
     session: InterviewSession,
     answer: str,
 ) -> dict:
-    """Handle answer submission."""
+    """Handle answer submission (API mode)."""
     
     if not answer or not answer.strip():
         return create_ws_message(
@@ -435,7 +613,7 @@ async def handle_skip(
     agent: InterviewAgent,
     session: InterviewSession,
 ) -> dict:
-    """Handle skip question."""
+    """Handle skip question (API mode)."""
     
     if session.status != SessionStatus.IN_PROGRESS:
         return create_ws_message(
@@ -466,7 +644,7 @@ async def handle_end(
     agent: InterviewAgent,
     session: InterviewSession,
 ) -> dict:
-    """Handle end interview."""
+    """Handle end interview (API mode)."""
     
     response = await agent.end_interview(
         session=session,
@@ -479,6 +657,120 @@ async def handle_end(
     return create_ws_message(
         msg_type=WSMessageType.COMPLETE,
         content=response.content,
+        data={
+            "summary": summary,
+        }
+    )
+
+
+# ============== Message Handlers (Hybrid/Custom Mode) ==============
+
+async def handle_answer_hybrid(
+    session: InterviewSession,
+    answer: str,
+    session_store: SessionStore,
+) -> dict:
+    """Handle answer submission (Hybrid/Custom mode)."""
+    
+    if not answer or not answer.strip():
+        return create_ws_message(
+            msg_type=WSMessageType.ERROR,
+            error="Answer cannot be empty",
+        )
+    
+    if session.status != SessionStatus.IN_PROGRESS:
+        return create_ws_message(
+            msg_type=WSMessageType.ERROR,
+            error=f"Interview is not in progress. Status: {session.status.value}",
+        )
+    
+    return await process_answer_hybrid(session, answer, session_store)
+
+
+async def handle_skip_hybrid(
+    session: InterviewSession,
+    session_store: SessionStore,
+) -> dict:
+    """Handle skip question (Hybrid/Custom mode)."""
+    
+    if session.status != SessionStatus.IN_PROGRESS:
+        return create_ws_message(
+            msg_type=WSMessageType.ERROR,
+            error=f"Interview is not in progress. Status: {session.status.value}",
+        )
+    
+    session.add_message(
+        role=MessageRole.CANDIDATE,
+        content="[Skipped]",
+        metadata={"skipped": True},
+    )
+    
+    next_question = session.next_question()
+    
+    if next_question is None:
+        session.status = SessionStatus.COMPLETED
+        session_store.update(session)
+        
+        return create_ws_message(
+            msg_type=WSMessageType.COMPLETE,
+            content="Interview complete! Thank you for your responses.",
+        )
+    
+    session.add_message(
+        role=MessageRole.INTERVIEWER,
+        content=next_question,
+        metadata={"question_number": session.current_question_index + 1},
+    )
+    
+    session_store.update(session)
+    
+    return create_ws_message(
+        msg_type=WSMessageType.QUESTION,
+        content=next_question,
+        data={
+            "question_number": session.current_question_index + 1,
+            "total_questions": len(session.questions),
+            "skipped": True,
+        }
+    )
+
+
+async def handle_end_hybrid(
+    session: InterviewSession,
+    session_store: SessionStore,
+) -> dict:
+    """Handle end interview (Hybrid/Custom mode)."""
+    
+    session.status = SessionStatus.CANCELLED
+    session.add_message(
+        role=MessageRole.SYSTEM,
+        content="Interview ended by user.",
+    )
+    
+    session_store.update(session)
+    
+    # Build summary
+    candidate_messages = [
+        m for m in session.conversation
+        if m.role == MessageRole.CANDIDATE and "[Skipped]" not in m.content
+    ]
+    follow_ups = [m for m in session.conversation if m.is_follow_up]
+    
+    summary = {
+        "session_id": session.session_id,
+        "resume_id": session.resume_id,
+        "mode": session.mode,
+        "model_type": session.model_type,
+        "status": session.status.value,
+        "questions_asked": session.current_question_index,
+        "total_questions": len(session.questions),
+        "answers_given": len(candidate_messages),
+        "follow_ups_asked": len(follow_ups),
+    }
+    
+    return create_ws_message(
+        msg_type=WSMessageType.COMPLETE,
+        content="Interview ended. Thank you for your time.",
         data={
             "summary": summary,
         }
