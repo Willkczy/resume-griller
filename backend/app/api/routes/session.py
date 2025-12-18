@@ -1,5 +1,9 @@
 """
 Interview Session API routes.
+
+Supports:
+- "api" model_type: Uses configured LLM (Groq/Gemini/etc)
+- "custom" model_type: Uses Hybrid approach (Groq preprocessing + Custom Model execution)
 """
 
 from typing import List, Optional
@@ -13,7 +17,11 @@ from backend.app.db.session_store import (
 )
 from backend.app.core.interview_agent import InterviewAgent, InterviewerResponse
 from backend.app.api.deps import get_retriever, get_llm
-from backend.app.services.llm_service import BaseLLMService, LLMServiceFactory
+from backend.app.services.llm_service import (
+    BaseLLMService,
+    LLMServiceFactory,
+    HybridModelService,
+)
 from rag.retriever import InterviewRetriever
 
 from pydantic import BaseModel, Field
@@ -114,33 +122,44 @@ def get_llm_service_for_model_type(model_type: str) -> BaseLLMService:
     Get LLM service based on model_type.
     
     Args:
-        model_type: "api" for cloud APIs (Groq/Gemini), "custom" for GCP VM model
+        model_type: "api" for cloud APIs (Groq/Gemini), "custom" for Hybrid mode
     
     Returns:
         Appropriate LLM service instance
     """
     if model_type == "custom":
-        # Import here to avoid circular imports
-        from backend.app.services.llm_service import CustomModelService
+        # Use Hybrid service for custom model
         try:
-            return CustomModelService()
+            return LLMServiceFactory.get_hybrid_service()
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Custom model not available: {str(e)}. Make sure IAP tunnel is running.",
+                detail=f"Hybrid model service not available: {str(e)}",
             )
     else:
         # Use default API provider (Groq/Gemini/etc based on .env)
         return LLMServiceFactory.get_service()
 
 
+def get_hybrid_service() -> HybridModelService:
+    """Get the hybrid model service instance."""
+    return LLMServiceFactory.get_hybrid_service()
+
+
 def create_interview_agent(
     model_type: str,
     retriever: InterviewRetriever,
 ) -> InterviewAgent:
-    """Create InterviewAgent with the appropriate LLM service."""
+    """Create InterviewAgent with the appropriate LLM service.
+    
+    Note: InterviewAgent is only used for API mode.
+          Custom mode is handled directly by _process_answer_hybrid().
+    """
     llm_service = get_llm_service_for_model_type(model_type)
-    return InterviewAgent(llm_service=llm_service, retriever=retriever)
+    return InterviewAgent(
+        llm_service=llm_service,
+        retriever=retriever,
+    )
 
 
 # ============== Endpoints ==============
@@ -154,12 +173,13 @@ async def create_session(
     """
     Create a new interview session and start the interview.
     
-    Args:
-        request.model_type: "api" for cloud LLM, "custom" for fine-tuned model
+    For "custom" model_type:
+    - Phase 1: Uses Groq to prepare interview context (summary, questions)
+    - Phase 2: Uses Custom Model for interview execution
     
     Returns the first question.
     """
-    # Verify resume exists (check if we have chunks for it)
+    # Verify resume exists
     try:
         summary = retriever.get_resume_summary(request.resume_id)
         if summary.get("total_chunks", 0) == 0:
@@ -175,7 +195,7 @@ async def create_session(
             detail=f"Resume not found: {request.resume_id}",
         )
     
-    # Create session with model_type
+    # Create session
     session = session_store.create(
         resume_id=request.resume_id,
         mode=request.mode,
@@ -184,10 +204,73 @@ async def create_session(
         max_follow_ups=request.max_follow_ups,
     )
     
-    # Create agent with appropriate LLM based on model_type
+    # For "custom" model_type, use Hybrid approach
+    if request.model_type == "custom":
+        try:
+            # Get full resume text for preprocessing
+            resume_text = retriever.get_full_resume_text(request.resume_id)
+            
+            # Get hybrid service and prepare context
+            hybrid_service = get_hybrid_service()
+            
+            print(f"[Session] Preparing hybrid interview context for {session.session_id}")
+            
+            # Phase 1: Groq prepares everything
+            prepared_context = await hybrid_service.prepare_interview_context(
+                session_id=session.session_id,
+                resume_text=resume_text,
+                mode=request.mode,
+                num_questions=request.num_questions,
+            )
+            
+            # Store prepared questions in session
+            session.questions = prepared_context["questions"]
+            session.status = SessionStatus.IN_PROGRESS
+            session.current_question_index = 0
+            
+            # Store context in session metadata for persistence
+            session.prepared_context = prepared_context
+            
+            # Add first question to conversation
+            if session.questions:
+                from backend.app.db.session_store import MessageRole
+                first_question = session.questions[0]
+                session.add_message(
+                    role=MessageRole.INTERVIEWER,
+                    content=first_question,
+                    metadata={"question_number": 1},
+                )
+            
+            session_store.update(session)
+            
+            return InterviewResponseModel(
+                type="question",
+                content=session.questions[0] if session.questions else "No questions generated",
+                question_number=1,
+                total_questions=len(session.questions),
+                evaluation=None,
+                metadata={
+                    "session_id": session.session_id,
+                    "model_type": "custom",
+                    "mode": request.mode,
+                    "preprocessing": "groq",
+                    "execution": "custom_model",
+                },
+            )
+            
+        except Exception as e:
+            print(f"[Session] Hybrid preparation failed: {e}")
+            # Fallback to API mode
+            session.model_type = "api"
+            session_store.update(session)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Custom model preparation failed: {str(e)}. Try using 'api' model_type instead.",
+            )
+    
+    # Standard API mode
     agent = create_interview_agent(request.model_type, retriever)
     
-    # Start interview (generates questions and returns first one)
     response = await agent.start_interview(
         session=session,
         num_questions=request.num_questions,
@@ -280,10 +363,9 @@ async def submit_answer(
     """
     Submit an answer to the current question.
     
-    The agent will evaluate the answer and either:
-    - Ask a follow-up question (grilling)
-    - Move to the next question
-    - Complete the interview
+    For "custom" model_type:
+    - Uses Custom Model with pre-prepared context for evaluation
+    - Generates follow-ups using Custom Model
     """
     session = session_store.get(session_id)
     
@@ -299,10 +381,13 @@ async def submit_answer(
             detail=f"Session is not in progress. Status: {session.status.value}",
         )
     
-    # Create agent with the same model_type as the session
+    # For custom model, use hybrid evaluation
+    if session.model_type == "custom":
+        return await _process_answer_hybrid(session, request.answer, session_store)
+    
+    # Standard API mode
     agent = create_interview_agent(session.model_type, retriever)
     
-    # Process the answer
     response = await agent.process_answer(
         session=session,
         answer=request.answer,
@@ -315,6 +400,141 @@ async def submit_answer(
         total_questions=response.total_questions,
         evaluation=response.evaluation,
         metadata=response.metadata,
+    )
+
+
+async def _process_answer_hybrid(
+    session: InterviewSession,
+    answer: str,
+    session_store: SessionStore,
+) -> InterviewResponseModel:
+    """
+    Process answer using Hybrid approach.
+    
+    Uses GrillingEngine with Custom Model for evaluation and follow-up generation.
+    The Custom Model receives compact prompts with pre-prepared context from Groq.
+    """
+    from backend.app.db.session_store import MessageRole
+    from backend.app.core.grilling_engine import GrillingEngine
+    
+    current_question = session.current_question
+    if not current_question:
+        return InterviewResponseModel(
+            type="complete",
+            content="Interview complete! Thank you for your responses.",
+            metadata={"session_id": session.session_id},
+        )
+    
+    # Add answer to conversation
+    session.add_message(role=MessageRole.CANDIDATE, content=answer)
+    
+    # Get hybrid service and create GrillingEngine with Custom Model
+    hybrid_service = get_hybrid_service()
+    
+    # Restore prepared context if needed
+    prepared_context = {}
+    if hasattr(session, 'prepared_context') and session.prepared_context:
+        prepared_context = session.prepared_context
+        hybrid_service.set_prepared_context(session.session_id, prepared_context)
+    
+    # Create GrillingEngine with Custom Model (interviewer) and prepared context
+    grilling_engine = GrillingEngine(
+        llm_service=hybrid_service.interviewer,  # Use Custom Model
+        model_type="custom",  # Enables compact prompts
+        prepared_context=prepared_context,  # Pass pre-processed context
+    )
+    
+    # Build conversation history
+    conversation_history = [
+        {"role": m.role.value, "content": m.content, "is_follow_up": m.is_follow_up}
+        for m in session.conversation[-10:]
+    ]
+    
+    # Evaluate answer using GrillingEngine (with Custom Model)
+    evaluation = await grilling_engine.evaluate_answer(
+        question=current_question,
+        answer=answer,
+        resume_context="",  # Not needed - using prepared_context
+        question_type=session.mode,
+        conversation_history=conversation_history,
+        follow_up_count=session.current_follow_up_count,
+        question_index=session.current_question_index,
+    )
+    
+    # Use GrillingEngine's decision logic
+    should_followup = grilling_engine.should_grill(
+        evaluation=evaluation,
+        follow_up_count=session.current_follow_up_count,
+        max_follow_ups=session.max_follow_ups,
+    )
+    
+    if should_followup:
+        # Generate follow-up using GrillingEngine (with Custom Model)
+        followup = await grilling_engine.generate_follow_up(
+            question=current_question,
+            answer=answer,
+            evaluation=evaluation,
+            conversation_history=conversation_history,
+            question_type=session.mode,
+        )
+        
+        session.increment_follow_up()
+        session.add_message(
+            role=MessageRole.INTERVIEWER,
+            content=followup,
+            is_follow_up=True,
+            metadata={
+                "gap": evaluation.gap_analysis.priority_gap.value if evaluation.gap_analysis.priority_gap else None,
+                "score": evaluation.score,
+                "detected_gaps": [g.value for g in evaluation.gap_analysis.detected_gaps],
+            },
+        )
+        
+        session_store.update(session)
+        
+        return InterviewResponseModel(
+            type="follow_up",
+            content=followup,
+            question_number=session.current_question_index + 1,
+            total_questions=len(session.questions),
+            evaluation=evaluation.to_dict(),
+            metadata={
+                "follow_up_count": session.current_follow_up_count,
+                "priority_gap": evaluation.gap_analysis.priority_gap.value if evaluation.gap_analysis.priority_gap else None,
+            },
+        )
+    
+    # Move to next question
+    next_question = session.next_question()
+    
+    if next_question is None:
+        session.status = SessionStatus.COMPLETED
+        session.add_message(role=MessageRole.SYSTEM, content="Interview completed.")
+        session_store.update(session)
+        
+        return InterviewResponseModel(
+            type="complete",
+            content="Excellent! That concludes our interview. Thank you for your thoughtful responses.",
+            evaluation=evaluation.to_dict(),
+            metadata={"session_id": session.session_id},
+        )
+    
+    # Ask next question
+    session.add_message(
+        role=MessageRole.INTERVIEWER,
+        content=next_question,
+        metadata={"question_number": session.current_question_index + 1},
+    )
+    
+    session_store.update(session)
+    
+    return InterviewResponseModel(
+        type="question",
+        content=next_question,
+        question_number=session.current_question_index + 1,
+        total_questions=len(session.questions),
+        evaluation=evaluation.to_dict(),
+        metadata={"session_id": session.session_id},
     )
 
 
@@ -339,17 +559,40 @@ async def skip_question(
             detail=f"Session is not in progress. Status: {session.status.value}",
         )
     
-    # Create agent with the same model_type as the session
-    agent = create_interview_agent(session.model_type, retriever)
+    from backend.app.db.session_store import MessageRole
     
-    response = await agent.skip_question(session=session)
+    session.add_message(
+        role=MessageRole.CANDIDATE,
+        content="[Skipped]",
+        metadata={"skipped": True},
+    )
+    
+    next_question = session.next_question()
+    
+    if next_question is None:
+        session.status = SessionStatus.COMPLETED
+        session_store.update(session)
+        
+        return InterviewResponseModel(
+            type="complete",
+            content="Interview complete! Thank you for your responses.",
+            metadata={"session_id": session.session_id},
+        )
+    
+    session.add_message(
+        role=MessageRole.INTERVIEWER,
+        content=next_question,
+        metadata={"question_number": session.current_question_index + 1},
+    )
+    
+    session_store.update(session)
     
     return InterviewResponseModel(
-        type=response.type.value,
-        content=response.content,
-        question_number=response.question_number,
-        total_questions=response.total_questions,
-        metadata=response.metadata,
+        type="question",
+        content=next_question,
+        question_number=session.current_question_index + 1,
+        total_questions=len(session.questions),
+        metadata={"session_id": session.session_id},
     )
 
 
@@ -357,7 +600,6 @@ async def skip_question(
 async def end_session(
     session_id: str,
     session_store: SessionStore = Depends(get_session_store),
-    retriever: InterviewRetriever = Depends(get_retriever),
 ):
     """End the interview session early."""
     session = session_store.get(session_id)
@@ -368,18 +610,20 @@ async def end_session(
             detail=f"Session not found: {session_id}",
         )
     
-    # Create agent with the same model_type as the session
-    agent = create_interview_agent(session.model_type, retriever)
+    from backend.app.db.session_store import MessageRole
     
-    response = await agent.end_interview(
-        session=session,
-        reason="ended by user",
+    session.status = SessionStatus.CANCELLED
+    session.add_message(
+        role=MessageRole.SYSTEM,
+        content="Interview ended by user.",
     )
     
+    session_store.update(session)
+    
     return InterviewResponseModel(
-        type=response.type.value,
-        content=response.content,
-        metadata=response.metadata,
+        type="complete",
+        content="Interview ended. Thank you for your time.",
+        metadata={"reason": "ended by user", "session_id": session.session_id},
     )
 
 
@@ -387,7 +631,6 @@ async def end_session(
 async def get_session_summary(
     session_id: str,
     session_store: SessionStore = Depends(get_session_store),
-    retriever: InterviewRetriever = Depends(get_retriever),
 ):
     """Get a summary of the interview session."""
     session = session_store.get(session_id)
@@ -398,12 +641,26 @@ async def get_session_summary(
             detail=f"Session not found: {session_id}",
         )
     
-    # Create agent with the same model_type as the session
-    agent = create_interview_agent(session.model_type, retriever)
+    from backend.app.db.session_store import MessageRole
     
-    summary = await agent.get_interview_summary(session)
+    candidate_messages = [
+        m for m in session.conversation
+        if m.role == MessageRole.CANDIDATE and "[Skipped]" not in m.content
+    ]
+    follow_ups = [m for m in session.conversation if m.is_follow_up]
     
-    return SessionSummaryResponse(**summary)
+    return SessionSummaryResponse(
+        session_id=session.session_id,
+        resume_id=session.resume_id,
+        mode=session.mode,
+        status=session.status.value,
+        questions_asked=session.current_question_index,
+        total_questions=len(session.questions),
+        answers_given=len(candidate_messages),
+        follow_ups_asked=len(follow_ups),
+        duration_seconds=(session.updated_at - session.created_at).total_seconds(),
+        conversation_length=len(session.conversation),
+    )
 
 
 @router.delete("/{session_id}")

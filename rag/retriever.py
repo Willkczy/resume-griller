@@ -83,12 +83,12 @@ class InterviewRetriever:
             n_questions: int = 5
     ) -> str:
         """
-        Build a prompt for the LLM with clear question type guidance.
+        Build a prompt for the fine-tuned model.
 
         Args:
             resume_id: ID of processed resume
             focus_area: Optional focus area
-            question_type: "hr", "tech", or "mixed" (converted from mode)
+            question_type: "technical", "behavioral", or "mixed"
             n_questions: Number of questions to generate
 
         Returns:
@@ -106,81 +106,26 @@ class InterviewRetriever:
 
         context = "\n\n".join(context_parts)
 
-        # Build DETAILED instruction based on question type
-        if question_type == "tech" or question_type == "technical":
-            instruction = f"""Generate {n_questions} TECHNICAL interview questions.
-
-    FOCUS ON:
-    - Specific technologies, frameworks, and tools mentioned in the resume
-    - Architecture and design decisions in their projects
-    - Implementation details and technical trade-offs
-    - Performance optimization and debugging approaches
-    - Code quality, testing strategies, and best practices
-    - System design and scalability considerations
-
-    QUESTION STYLE:
-    - "Walk me through the architecture of [specific project]..."
-    - "How did you implement/optimize [specific feature]..."
-    - "What technical challenges did you face in [project]..."
-    - "Why did you choose [technology] over alternatives..."
-
-    DO NOT ask behavioral or STAR-method questions."""
-
-        elif question_type == "hr" or question_type == "behavioral":
-            instruction = f"""Generate {n_questions} BEHAVIORAL (HR) interview questions using the STAR method.
-
-    FOCUS ON:
-    - Leadership and team collaboration experiences
-    - Conflict resolution and difficult situations
-    - Time management and handling pressure
-    - Communication with stakeholders
-    - Career growth, learning, and adaptability
-    - Achievements and their impact on the team/company
-
-    QUESTION STYLE:
-    - "Tell me about a time when you [situation]..."
-    - "Describe a situation where you had to [challenge]..."
-    - "Give me an example of when you [behavior]..."
-    - "How did you handle [difficult situation]..."
-
-    DO NOT ask for technical implementation details. Focus on experiences, behaviors, and soft skills."""
-
-        else:  # mixed
-            instruction = f"""Generate {n_questions} interview questions (BALANCED mix of technical and behavioral).
-
-    SPLIT: {n_questions // 2} technical + {n_questions - (n_questions // 2)} behavioral questions.
-
-    TECHNICAL QUESTIONS should ask about:
-    - Project architecture, technical decisions, implementation
-    - Specific technologies and tools used
-    - Challenges and problem-solving approaches
-
-    BEHAVIORAL QUESTIONS should ask about:
-    - Team collaboration, leadership experiences
-    - Handling difficult situations, conflict resolution
-    - Time management, communication skills
-
-    Ensure clear distinction between technical and behavioral questions."""
+        # Build instruction based on question type
+        # Support both naming conventions: "tech"/"technical" and "hr"/"behavioral"
+        if question_type in ["technical", "tech"]:
+            instruction = f"Generate {n_questions} TECHNICAL interview questions focusing on the candidate's skills, projects, architecture decisions, and technical implementation details."
+        elif question_type in ["behavioral", "hr"]:
+            instruction = f"Generate {n_questions} BEHAVIORAL interview questions using STAR format (Tell me about a time...). Focus on teamwork, leadership, challenges, and soft skills. Do NOT ask technical implementation questions."
+        else:
+            instruction = f"Generate {n_questions} interview questions (mix of technical and behavioral) based on the candidate's resume."
 
         if focus_area:
-            instruction += f"\n\nSPECIAL FOCUS: Prioritize questions related to {focus_area}."
+            instruction += f" Focus specifically on: {focus_area}."
 
-        # Format final prompt with stronger guidance
-        prompt = f"""You are an expert {question_type.upper()} interviewer preparing for a rigorous mock interview.
+        # Format final prompt
+        prompt = f"""You are an expert interviewer. {instruction}
 
-    {instruction}
+Here is the candidate's resume information:
 
-    CANDIDATE'S RESUME:
-    {context}
+{context}
 
-    REQUIREMENTS:
-    1. Questions must be SPECIFIC to this candidate's actual experience
-    2. Reference actual projects, technologies, or experiences from the resume
-    3. Avoid generic questions that could apply to any candidate
-    4. Each question should probe for depth and specific details
-    5. Questions should be challenging but fair
-
-    Generate exactly {n_questions} questions, numbered 1-{n_questions}."""
+Generate specific, relevant interview questions based on this resume."""
 
         return prompt
 
@@ -201,6 +146,53 @@ class InterviewRetriever:
             "sections": list(sections.keys()),
             "preview": sections
         }
+
+    def get_full_resume_text(self, resume_id: str) -> str:
+        """
+        Get the full text of a resume by combining all chunks.
+        
+        Used by HybridModelService for preprocessing.
+        
+        Args:
+            resume_id: The resume ID
+            
+        Returns:
+            Full resume text as a single string
+        """
+        try:
+            # Get all chunks using the embedder
+            chunks = self.embedder.get_all_chunks(resume_id)
+            
+            if not chunks:
+                print(f"[Retriever] No chunks found for resume: {resume_id}")
+                return ""
+            
+            # Sort by chunk_index if available
+            def get_chunk_index(chunk):
+                metadata = chunk.get("metadata", {})
+                return metadata.get("chunk_index", 0)
+            
+            sorted_chunks = sorted(chunks, key=get_chunk_index)
+            
+            # Combine all text with section headers
+            text_parts = []
+            for chunk in sorted_chunks:
+                content = chunk.get("content", "")
+                section = chunk.get("metadata", {}).get("section", "")
+                
+                if section:
+                    text_parts.append(f"[{section.upper()}]\n{content}")
+                else:
+                    text_parts.append(content)
+            
+            full_text = "\n\n".join(text_parts)
+            print(f"[Retriever] Got full resume text: {len(full_text)} chars, {len(sorted_chunks)} chunks")
+            
+            return full_text
+            
+        except Exception as e:
+            print(f"[Retriever] Error getting full resume text: {e}")
+            return ""
 
 
 def main():
@@ -233,8 +225,14 @@ def main():
     print(f"   Chunks: {summary['total_chunks']}")
     print(f"   Sections: {summary['sections']}")
 
+    # Test get_full_resume_text
+    print(f"\n3. Full Resume Text:")
+    full_text = retriever.get_full_resume_text(resume_id)
+    print(f"   Length: {len(full_text)} chars")
+    print(f"   Preview: {full_text[:200]}...")
+
     # Build prompts for different scenarios
-    print(f"\n3. Generated Prompts:")
+    print(f"\n4. Generated Prompts:")
 
     # General prompt
     print(f"\n{'=' * 40}")
