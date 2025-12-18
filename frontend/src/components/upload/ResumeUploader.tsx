@@ -4,7 +4,7 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Upload, FileText, Loader2, CheckCircle, AlertCircle, Video, MessageSquare } from 'lucide-react';
+import { Upload, FileText, Loader2, CheckCircle, AlertCircle, Video, MessageSquare, Cloud, Cpu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { uploadResume, createSession } from '@/lib/api';
@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 
 type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
 type UIMode = 'video' | 'chat';
+type ModelType = 'api' | 'custom';  // ⭐ 新增
 
 export function ResumeUploader() {
   const router = useRouter();
@@ -23,6 +24,7 @@ export function ResumeUploader() {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedMode, setSelectedMode] = useState<InterviewMode>('mixed');
   const [selectedUIMode, setSelectedUIMode] = useState<UIMode>('video');
+  const [selectedModelType, setSelectedModelType] = useState<ModelType>('api');  // ⭐ 新增
   const [numQuestions, setNumQuestions] = useState(5);
   const [isStarting, setIsStarting] = useState(false);
 
@@ -83,6 +85,7 @@ export function ResumeUploader() {
       const response = await createSession({
         resume_id: uploadResult.resume_id,
         mode: selectedMode,
+        model_type: selectedModelType,  // ⭐ 新增
         num_questions: numQuestions,
       });
 
@@ -93,7 +96,16 @@ export function ResumeUploader() {
         throw new Error('No session ID returned');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start interview');
+      // ⭐ 改進錯誤訊息
+      let errorMessage = 'Failed to start interview';
+      if (err instanceof Error) {
+        errorMessage = err.message;
+        // 特別處理 Custom Model 錯誤
+        if (selectedModelType === 'custom' && err.message.includes('503')) {
+          errorMessage = 'Custom model is not available. Please make sure the IAP tunnel is running, or try Cloud API instead.';
+        }
+      }
+      setError(errorMessage);
       setIsStarting(false);
     }
   };
@@ -230,6 +242,52 @@ export function ResumeUploader() {
               </div>
             </div>
 
+            {/* ⭐ AI Model Selection - 新增這整個區塊 */}
+            <div>
+              <label className="text-sm font-medium mb-3 block">AI Model</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setSelectedModelType('api')}
+                  className={cn(
+                    'p-4 rounded-lg border-2 text-left transition-colors',
+                    selectedModelType === 'api'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  )}
+                >
+                  <Cloud className="w-8 h-8 mb-2 text-blue-500" />
+                  <div className="font-medium">Cloud API</div>
+                  <div className="text-xs text-gray-500">
+                    Groq / Gemini - Fast & Stable
+                  </div>
+                </button>
+                <button
+                  onClick={() => setSelectedModelType('custom')}
+                  className={cn(
+                    'p-4 rounded-lg border-2 text-left transition-colors',
+                    selectedModelType === 'custom'
+                      ? 'border-purple-500 bg-purple-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  )}
+                >
+                  <Cpu className="w-8 h-8 mb-2 text-purple-500" />
+                  <div className="font-medium">Our Model</div>
+                  <div className="text-xs text-gray-500">
+                    Fine-tuned for interviews
+                  </div>
+                </button>
+              </div>
+              {/* ⭐ Custom Model 警告訊息 */}
+              {selectedModelType === 'custom' && (
+                <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-xs text-amber-700">
+                    ⚠️ <strong>Note:</strong> Custom model requires IAP tunnel connection to GCP VM. 
+                    If connection fails, please switch to Cloud API.
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* Interview Mode Selection */}
             <div>
               <label className="text-sm font-medium mb-3 block">Question Type</label>
@@ -282,6 +340,17 @@ export function ResumeUploader() {
                 <p>📄 {uploadResult.filename}</p>
                 <p>📊 {uploadResult.chunks_created} sections extracted</p>
                 <p>🏷️ Sections: {uploadResult.sections.join(', ')}</p>
+              </div>
+            </div>
+
+            {/* ⭐ 顯示選擇的設定摘要 */}
+            <div className="bg-gray-100 rounded-lg p-4">
+              <h4 className="font-medium text-sm mb-2">Your Selection</h4>
+              <div className="text-sm text-gray-600 space-y-1">
+                <p>🎥 Experience: <span className="font-medium">{selectedUIMode === 'video' ? 'Video Mode' : 'Chat Mode'}</span></p>
+                <p>🤖 AI Model: <span className="font-medium">{selectedModelType === 'api' ? 'Cloud API' : 'Custom Model'}</span></p>
+                <p>❓ Question Type: <span className="font-medium capitalize">{selectedMode}</span></p>
+                <p>📝 Questions: <span className="font-medium">{numQuestions}</span></p>
               </div>
             </div>
 

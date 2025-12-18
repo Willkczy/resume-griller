@@ -23,11 +23,13 @@ export interface ResumeSummary {
 // ============== Session Types ==============
 
 export type InterviewMode = 'hr' | 'tech' | 'mixed';
+export type ModelType = 'api' | 'custom';
 export type SessionStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
 
 export interface SessionCreateRequest {
   resume_id: string;
   mode: InterviewMode;
+  model_type: ModelType;
   num_questions?: number;
   max_follow_ups?: number;
   focus_areas?: string[];
@@ -37,6 +39,7 @@ export interface SessionResponse {
   session_id: string;
   resume_id: string;
   mode: string;
+  model_type: ModelType;
   status: SessionStatus;
   current_question_index: number;
   total_questions: number;
