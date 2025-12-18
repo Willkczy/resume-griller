@@ -1,50 +1,33 @@
-# ===========================================
-# Resume Griller - Git Ignore
-# ===========================================
-
-# ----- Environment & Secrets -----
+# --- Security (Never Upload) ---
 .env
-.env.local
-.env.*.local
-*.pem
-secrets/
+.env.*
+!.env.example
 
-# ----- Python -----
+# --- Python Cache ---
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
+
+# --- Virtual Environment ---
 .venv/
 venv/
 env/
-.eggs/
-*.egg-info/
-*.egg
-dist/
-build/
-.pytest_cache/
-.coverage
-htmlcov/
-.mypy_cache/
-.ruff_cache/
-
-# ----- uv -----
 .uv/
 uv.lock
 
-# ----- Node.js -----
-node_modules/
+# --- Node.js / Frontend ---
+**/node_modules
 npm-debug.log*
 yarn-debug.log*
 .pnpm-debug.log*
+**/next-env.d.ts
 
-# ----- Next.js -----
+# --- Next.js ---
 .next/
 out/
 .vercel
 
-# ----- ML / Training -----
+# --- ML / Training ---
 ml/data/resumes/*
 ml/data/interview_qa/*
 ml/data/processed/*
@@ -57,26 +40,25 @@ ml/models/exported/*
 wandb/
 !*.gitkeep
 
-# ----- IDEs -----
+# --- Database and data ---
+*.db
+*.sqlite3
+data/uploads/
+data/chromadb/
+
+# --- IDE Settings ---
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# ----- OS -----
+# --- OS System Files ---
 .DS_Store
 Thumbs.db
-
-# ----- Database -----
-*.db
-*.sqlite
-*.sqlite3
-
-# ----- Uploads & Temp -----
-uploads/
-temp/
-tmp/
-
-# ----- Logs -----
-logs/
-*.log
+*.egg-info/
+.eggs/
+dist/
+build/
+develop-eggs/
+lib/
+lib64/

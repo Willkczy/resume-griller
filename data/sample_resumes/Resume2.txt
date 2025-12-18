@@ -1,0 +1,41 @@
+SARAH CHEN
+DATA SCIENTIST
+
+Contact: sarah.chen@email.com | (555) 987-6543 | San Francisco, CA
+Portfolio: sarahchen.io | LinkedIn: linkedin.com/in/sarahchen
+
+====== CORE COMPETENCIES ======
+
+Machine Learning: Supervised/Unsupervised Learning, Deep Learning, NLP, Computer Vision
+Programming: Python, R, SQL, Scala
+ML Frameworks: TensorFlow, PyTorch, Scikit-learn, XGBoost, Keras
+Big Data: Spark, Hadoop, Hive, Airflow
+Visualization: Tableau, Matplotlib, Seaborn, Plotly
+Cloud Platforms: AWS SageMaker, GCP Vertex AI, Azure ML
+
+====== PROFESSIONAL EXPERIENCE ======
+
+Senior Data Scientist
+Netflix | Mar 2021 - Present
+- Developed recommendation algorithm improving user engagement by 15%
+- Built NLP pipeline for content classification processing 1M+ titles
+- Led A/B testing framework used across 3 product teams
+- Technologies: Python, PyTorch, Spark, AWS
+
+Data Scientist
+Uber | Jul 2018 - Feb 2021
+- Created demand forecasting model with 92% accuracy
+- Reduced ETL processing time by 50% using Spark optimization
+- Built real-time fraud detection system
+- Technologies: Python, TensorFlow, Hadoop, GCP
+
+====== EDUCATION ======
+
+M.S. Data Science | Stanford University | 2018
+B.S. Statistics | UC Berkeley | 2016
+
+====== PUBLICATIONS ======
+
+"Scalable Deep Learning for Recommendation Systems" - KDD 2022
+"Real-time Anomaly Detection in Streaming Data" - NeurIPS 2021 Workshop
+```

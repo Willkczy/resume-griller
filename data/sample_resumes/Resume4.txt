@@ -1,0 +1,61 @@
+EMILY WANG
+Machine Learning Engineer
+
+emily.wang@email.com | github.com/emilywang | linkedin.com/in/emilywang
+
+########################################
+EDUCATION
+########################################
+
+Master of Science in Machine Learning
+Carnegie Mellon University | Dec 2023
+Relevant Coursework: Deep Learning, NLP, Computer Vision, Reinforcement Learning
+
+Bachelor of Science in Computer Science
+University of Michigan | May 2021
+
+########################################
+SKILLS
+########################################
+
+Languages:        Python, C++, Java, SQL
+ML/DL:            PyTorch, TensorFlow, JAX, Hugging Face Transformers
+MLOps:            MLflow, Weights & Biases, DVC, Docker
+Data:             Pandas, NumPy, Spark, dbt
+Cloud:            AWS (SageMaker, EC2), GCP (Vertex AI)
+
+########################################
+PROJECTS
+########################################
+
+LLM Fine-tuning for Code Generation | 2023
+- Fine-tuned CodeLlama-7B using LoRA for Python code completion
+- Achieved 45% improvement on HumanEval benchmark
+- Deployed model on AWS SageMaker with auto-scaling
+- Tech: PyTorch, PEFT, Transformers, AWS
+
+Real-time Object Detection System | 2023
+- Built YOLO-based detection system for autonomous vehicles
+- Optimized inference to 30 FPS on edge devices using TensorRT
+- Created synthetic training data pipeline using Unity
+- Tech: PyTorch, OpenCV, TensorRT, Unity
+
+Sentiment Analysis API | 2022
+- Developed BERT-based sentiment classifier with 94% accuracy
+- Built FastAPI backend serving 1000+ requests/second
+- Implemented CI/CD pipeline with GitHub Actions
+- Tech: Transformers, FastAPI, Docker, GitHub Actions
+
+########################################
+EXPERIENCE
+########################################
+
+ML Engineering Intern
+Google | Summer 2023
+- Improved YouTube recommendation model CTR by 3%
+- Developed data pipeline processing 10TB daily
+
+Research Assistant
+CMU ML Department | 2022 - 2023
+- Published paper on efficient transformer architectures
+- Contributed to open-source JAX library

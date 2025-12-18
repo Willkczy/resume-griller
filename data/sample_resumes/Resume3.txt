@@ -1,0 +1,50 @@
+MICHAEL RODRIGUEZ
+DevOps Engineer & Cloud Architect
+
+michael.rodriguez@email.com
+Phone: (555) 456-7890
+Location: Austin, TX
+
+-----------------------------------------------------------
+CERTIFICATIONS
+-----------------------------------------------------------
+- AWS Solutions Architect Professional (2023)
+- Certified Kubernetes Administrator (CKA) (2022)
+- HashiCorp Terraform Associate (2022)
+- AWS DevOps Engineer Professional (2021)
+
+-----------------------------------------------------------
+TECHNICAL SKILLS
+-----------------------------------------------------------
+Cloud Platforms:     AWS, GCP, Azure
+Containerization:    Docker, Kubernetes, ECS, EKS
+IaC:                 Terraform, CloudFormation, Pulumi
+CI/CD:               Jenkins, GitLab CI, GitHub Actions, ArgoCD
+Monitoring:          Prometheus, Grafana, DataDog, ELK Stack
+Scripting:           Python, Bash, Go
+Version Control:     Git, GitHub, GitLab
+
+-----------------------------------------------------------
+WORK EXPERIENCE
+-----------------------------------------------------------
+Lead DevOps Engineer
+Amazon Web Services | 2021 - Present
+
+- Architected multi-region infrastructure supporting 99.99% uptime
+- Implemented GitOps workflow reducing deployment failures by 70%
+- Managed infrastructure costs, achieving $2M annual savings
+- Led migration of 200+ microservices to Kubernetes
+
+DevOps Engineer
+Stripe | 2018 - 2021
+
+- Built automated testing pipeline with 90% code coverage
+- Designed disaster recovery system with 15-minute RTO
+- Created self-service deployment platform for 50+ developers
+
+-----------------------------------------------------------
+EDUCATION
+-----------------------------------------------------------
+B.S. Computer Engineering
+Texas A&M University, 2018
+```
