@@ -7,6 +7,8 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyc
+*.pyo
 
 # --- Virtual Environment ---
 .venv/
@@ -54,7 +56,10 @@ data/chromadb/
 
 # --- OS System Files ---
 .DS_Store
+**/.DS_Store
 Thumbs.db
+
+# --- Build & Distribution ---
 *.egg-info/
 .eggs/
 dist/
@@ -62,3 +67,9 @@ build/
 develop-eggs/
 lib/
 lib64/
+
+# --- Test & Temporary Files ---
+test_*.mp3
+test_*.wav
+*.tmp
+*.temp
