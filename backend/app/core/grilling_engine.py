@@ -17,6 +17,9 @@ import json
 import re
 
 from backend.app.services.llm_service import BaseLLMService
+from backend.app.core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 # ============== Gap/Mistake Types (Based on Paper Section III-C) ==============
@@ -257,11 +260,11 @@ class GrillingEngine:
         if model_type == "custom":
             self.use_compact_prompts = True
             self.max_prompt_chars = 2500
-            print(f"[GrillingEngine] Hybrid mode: using compact prompts")
+            logger.info("grilling_mode_selected", mode="hybrid", prompt_type="compact")
         else:
             self.use_compact_prompts = False
             self.max_prompt_chars = 8000
-            print(f"[GrillingEngine] Standard mode: using full prompts")
+            logger.info("grilling_mode_selected", mode="standard", prompt_type="full")
     
     def set_prepared_context(self, context: Dict):
         """Set prepared context from Groq preprocessing."""
@@ -319,7 +322,7 @@ class GrillingEngine:
                     follow_up_count=follow_up_count,
                 )
         except Exception as e:
-            print(f"[GrillingEngine] Evaluation failed: {e}")
+            logger.error("evaluation_failed", error=str(e), exc_info=True)
             evaluation = self._fallback_evaluation(answer, question, follow_up_count)
         
         # Apply forced first follow-up rule
@@ -382,7 +385,7 @@ Return JSON only:
 
 Valid gaps: no_specific_example, no_metrics, too_generic, unclear_role, no_outcome, no_tech_depth"""
 
-        print(f"[GrillingEngine] Compact eval prompt: {len(prompt)} chars")
+        logger.debug("compact_eval_prompt_generated", prompt_length=len(prompt))
         
         try:
             response = await self.llm.generate(
