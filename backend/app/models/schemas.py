@@ -176,6 +176,9 @@ class HealthCheck(BaseModel):
     version: str = "1.0.0"
     llm_mode: str
     llm_provider: Optional[str] = None
+    voice_enabled: bool = False
+    custom_model_available: bool = False
+    dependencies: Dict[str, bool] = Field(default_factory=dict)
 
 
 # Update forward references
