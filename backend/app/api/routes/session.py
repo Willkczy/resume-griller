@@ -7,7 +7,7 @@ Supports:
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Request
 
 from backend.app.db.session_store import (
     InterviewSession,
@@ -22,6 +22,7 @@ from backend.app.services.llm_service import (
     LLMServiceFactory,
     HybridModelService,
 )
+from backend.app.middleware.rate_limit import limiter
 from rag.retriever import InterviewRetriever
 
 from pydantic import BaseModel, Field
@@ -165,7 +166,9 @@ def create_interview_agent(
 # ============== Endpoints ==============
 
 @router.post("", response_model=InterviewResponseModel)
+@limiter.limit("5/minute")
 async def create_session(
+    http_request: Request,
     request: SessionCreateRequest,
     session_store: SessionStore = Depends(get_session_store),
     retriever: InterviewRetriever = Depends(get_retriever),
@@ -354,7 +357,9 @@ async def get_session(
 
 
 @router.post("/{session_id}/answer", response_model=InterviewResponseModel)
+@limiter.limit("10/minute")
 async def submit_answer(
+    http_request: Request,
     session_id: str,
     request: AnswerRequest,
     session_store: SessionStore = Depends(get_session_store),
