@@ -2,6 +2,30 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+---
+
+## 🚀 Current Status (Updated 2026-01-16)
+
+**Production Readiness**: 6/10 (improved from 3/10)
+
+### ✅ Recently Completed (Quick Wins - Phase 1)
+- ✅ **Structured Logging** with structlog (JSON + console modes)
+- ✅ **Rate Limiting** middleware (SlowAPI - 5 req/min sessions, 10 req/min answers)
+- ✅ **Enhanced Health Check** (custom model probe, dependency monitoring)
+- ✅ **Docker Compose** setup (PostgreSQL, Redis, Backend, Frontend)
+- ✅ **LangGraph Dependencies** added (preparation for Phase 2 refactor)
+- ✅ **Code Cleanup** (removed 350 lines of duplicate code)
+- ✅ **Development Roadmap** (12-month plan in DEVELOPMENT_ROADMAP.md)
+
+### ⏳ Next Priorities (Phase 1 Remaining)
+1. 🔴 **Session Persistence** (CRITICAL) - Migrate from in-memory to PostgreSQL
+2. 🟡 **Test Coverage** (HIGH) - Currently <5%, target 70%+
+3. 🟡 **Authentication** (HIGH) - Implement JWT-based auth
+
+**See DEVELOPMENT_ROADMAP.md for full 4-phase plan (Q1-Q4 2026)**
+
+---
+
 ## Project Overview
 
 **Resume Griller** is a full-stack AI-powered interview simulator that analyzes resumes and conducts realistic mock interviews with intelligent follow-up questions. The system features a sophisticated "grilling engine" based on academic research that evaluates answers across 7 dimensions and detects 18 types of gaps to generate targeted follow-up questions.
@@ -12,7 +36,38 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Quick Start
 
-### Backend
+### Option 1: Docker Compose (Recommended) 🐳
+
+The easiest way to run the entire stack:
+
+```bash
+# Configure environment
+cp .env.example .env
+# Edit .env with your API keys
+
+# Start all services (PostgreSQL, Redis, Backend, Frontend)
+docker-compose up -d
+
+# View logs
+docker-compose logs -f backend
+
+# Stop all services
+docker-compose down
+```
+
+**Services**:
+- Backend API: `http://localhost:8000` (with auto-reload)
+- Frontend: `http://localhost:3000`
+- PostgreSQL: `localhost:5432`
+- Redis: `localhost:6379`
+
+**Health Check**: `curl http://localhost:8000/health`
+
+---
+
+### Option 2: Local Development (Manual)
+
+#### Backend
 
 ```bash
 # Install dependencies (using uv - recommended)
@@ -33,7 +88,7 @@ PYTHONPATH=. uv run python -m uvicorn backend.app.main:app --reload --port 8000
 Backend available at: `http://localhost:8000`
 API Docs: `http://localhost:8000/docs`
 
-### Frontend
+#### Frontend
 
 ```bash
 cd frontend
@@ -42,6 +97,8 @@ npm run dev
 ```
 
 Frontend available at: `http://localhost:3000`
+
+---
 
 ### Running Tests
 
@@ -141,7 +198,10 @@ resume-griller/
 │   │   ├── core/                     # Core Business Logic
 │   │   │   ├── grilling_engine.py    # Gap detection & scoring (973 lines)
 │   │   │   ├── interview_agent.py    # Interview orchestration (596 lines)
-│   │   │   └── resume_parser.py      # Backend resume parser (175 lines)
+│   │   │   └── logging_config.py     # Structured logging config (NEW - 56 lines)
+│   │   │
+│   │   ├── middleware/               # Middleware (NEW)
+│   │   │   └── rate_limit.py         # Rate limiting with SlowAPI (37 lines)
 │   │   │
 │   │   ├── services/                 # External Service Integrations
 │   │   │   ├── llm_service.py        # LLM provider abstraction (828 lines)
@@ -150,15 +210,14 @@ resume-griller/
 │   │   │   └── tts_service.py        # ElevenLabs Text-to-Speech (212 lines)
 │   │   │
 │   │   ├── db/
-│   │   │   └── session_store.py      # In-memory session storage
+│   │   │   └── session_store.py      # In-memory session storage (⚠️ TODO: PostgreSQL)
 │   │   │
 │   │   ├── models/
 │   │   │   └── schemas.py            # Pydantic models
 │   │   │
 │   │   ├── config.py                 # Settings from .env (98 lines)
-│   │   └── main.py                   # FastAPI app entry point
+│   │   └── main.py                   # FastAPI app entry point (enhanced logging)
 │   │
-│   ├── requirements.txt              # Backend dependencies (32+ packages)
 │   └── test_websocket.html           # WebSocket testing interface
 │
 ├── frontend/                         # Next.js Frontend (TypeScript)
@@ -223,7 +282,7 @@ resume-griller/
 │   └── exported_prompts.json         # Prompts for offline inference
 │
 ├── tests/
-│   └── test_parser.py                # RAG parser tests (47 lines)
+│   └── test_parser.py                # RAG parser tests (47 lines) (⚠️ Need more coverage)
 │
 ├── scripts/
 │   └── start_iap_tunnel.sh           # GCP IAP tunnel helper
@@ -235,8 +294,13 @@ resume-griller/
 ├── uv.lock                           # Locked dependencies
 ├── .env.example                      # Environment template (48 lines)
 ├── .gitignore
+├── .dockerignore                     # Docker ignore patterns (NEW)
+├── docker-compose.yml                # Multi-service orchestration (NEW - 116 lines)
+├── Dockerfile.backend                # Backend container (NEW - 36 lines)
 ├── README.md                         # User documentation
-└── CLAUDE.md                         # This file
+├── CLAUDE.md                         # This file
+├── DEVELOPMENT_ROADMAP.md            # 12-month development plan (NEW - 2,780 lines)
+└── QUICK_WINS_COMPLETED.md           # Phase 1 completion summary (NEW - 300 lines)
 ```
 
 ## Key Components
@@ -499,9 +563,9 @@ The RAG pipeline is shared across both the full-stack app and the standalone `ra
 
 ## Dependencies
 
-### Backend (`backend/requirements.txt`)
+### Backend (`pyproject.toml`)
 
-**Total**: 32+ packages
+**Total**: 35+ packages (managed with uv)
 
 **Categories**:
 
@@ -534,17 +598,27 @@ The RAG pipeline is shared across both the full-stack app and the standalone `ra
    - `sentence-transformers` - Embeddings
    - `langchain` - LLM framework
 
-6. **LoRA Model**:
+6. **Multi-Agent Framework** (NEW):
+   - `langgraph>=1.0.6` - Multi-agent orchestration
+   - `langgraph-checkpoint-sqlite>=3.0.2` - Persistent state checkpoints
+
+7. **LoRA Model**:
    - `transformers` - HuggingFace Transformers
    - `peft` - LoRA fine-tuning
    - `accelerate` - Model optimization
 
-7. **Voice Services**:
+8. **Voice Services**:
    - `deepgram-sdk` - Deepgram STT (implied in code)
    - `elevenlabs` - ElevenLabs TTS (implied in code)
 
-8. **Utilities**:
-   - `python-dotenv` - Environment variables
+9. **Logging & Monitoring** (NEW):
+   - `structlog>=24.1.0` - Structured logging
+
+10. **Security & Rate Limiting** (NEW):
+    - `slowapi>=0.1.9` - Rate limiting middleware
+
+11. **Utilities**:
+    - `python-dotenv` - Environment variables
 
 ### Frontend (`frontend/package.json`)
 
