@@ -36,6 +36,10 @@ dependencies = [
     "groq>=0.37.1",
     "langgraph>=1.0.6",
     "langgraph-checkpoint-sqlite>=3.0.2",
+    # Logging
+    "structlog>=24.1.0",
+    # Rate Limiting
+    "slowapi>=0.1.9",
 ]
 
 [project.optional-dependencies]
