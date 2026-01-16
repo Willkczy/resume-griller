@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: resume-griller-db
+    environment:
+      POSTGRES_DB: resume_griller
+      POSTGRES_USER: resume_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U resume_user -d resume_griller"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - resume-griller-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: resume-griller-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - resume-griller-network
+
+  # Backend FastAPI Application
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: resume-griller-backend
+    environment:
+      # App settings
+      DEBUG: ${DEBUG:-false}
+      DATABASE_URL: postgresql+asyncpg://resume_user:${POSTGRES_PASSWORD:-changeme}@postgres:5432/resume_griller
+
+      # LLM Configuration
+      LLM_MODE: ${LLM_MODE:-api}
+      LLM_PROVIDER: ${LLM_PROVIDER:-groq}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+
+      # Custom Model
+      CUSTOM_MODEL_ENABLED: ${CUSTOM_MODEL_ENABLED:-false}
+      CUSTOM_MODEL_URL: ${CUSTOM_MODEL_URL}
+
+      # Voice Services
+      VOICE_ENABLED: ${VOICE_ENABLED:-false}
+      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+
+      # Directories
+      UPLOAD_DIR: /app/data/uploads
+      CHROMA_PERSIST_DIR: /app/data/chromadb
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./backend:/app/backend
+      - ./rag:/app/rag
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - resume-griller-network
+
+  # Frontend Next.js Application
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: resume-griller-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_WS_URL: ws://localhost:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    command: npm run dev
+    networks:
+      - resume-griller-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  resume-griller-network:
+    driver: bridge
