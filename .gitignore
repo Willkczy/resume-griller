@@ -72,4 +72,4 @@ lib64/
 test_*.mp3
 test_*.wav
 *.tmp
-*.temp
+*.temp.claude/settings.local.json
