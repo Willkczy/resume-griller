@@ -73,3 +73,13 @@ test_*.mp3
 test_*.wav
 *.tmp
 *.temp
+
+# --- Claude / Worktrees ---
+.claude/settings.local.json
+.claude/worktrees/
+
+# --- Generated HTML exports ---
+*.html
+*_files/
+!frontend/**/*.html
+!backend/test_websocket.html
