@@ -43,7 +43,7 @@ An intelligent interview preparation platform that analyzes your resume and cond
   - Text-to-Speech (TTS) via ElevenLabs
   - Real-time voice interview simulation with sound on/off control
 - **Real-time Communication**: WebSocket-based interactive interview sessions
-- **Session Management**: Track interview progress, conversation history, and evaluation scores
+- **Persistent Sessions**: Interview state checkpointed to SQLite via LangGraph — survives server restarts
 
 ### LLM Backend Options
 
@@ -80,7 +80,7 @@ Phase 2 (Custom Model - Interview Execution):
 
 ```
 ┌─────────────────┐
-│    Frontend     │  Next.js 15 + React 19 + TypeScript + Tailwind CSS
+│    Frontend     │  Next.js 16 + React 19 + TypeScript + Tailwind CSS
 │   (Port 3000)   │
 └────────┬────────┘
          │ HTTP/WebSocket
@@ -89,6 +89,11 @@ Phase 2 (Custom Model - Interview Execution):
 │    Backend      │  FastAPI + Python 3.11+ + Async I/O
 │   (Port 8000)   │
 └────────┬────────┘
+         │
+         ├──────► LangGraph Interview Graph
+         │         ├─► StateGraph with 9 nodes + 3 routers
+         │         ├─► SQLite checkpoint persistence
+         │         └─► GraphServices dependency injection
          │
          ├──────► LLM Service
          │         ├─► API Mode: Groq / Gemini / OpenAI / Claude
@@ -129,7 +134,7 @@ Phase 2 (Custom Model - Interview Execution):
 ## Tech Stack
 
 ### Frontend
-- **Framework**: Next.js 15 (App Router)
+- **Framework**: Next.js 16 (App Router)
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS 4
 - **State Management**: Zustand
@@ -141,6 +146,7 @@ Phase 2 (Custom Model - Interview Execution):
 - **Language**: Python 3.11+
 - **Package Manager**: [uv](https://github.com/astral-sh/uv) (recommended) or pip
 - **Async Runtime**: uvicorn + asyncio
+- **Orchestration**: LangGraph (StateGraph + SQLite checkpointing)
 - **LLM Clients**: groq, anthropic, openai, google-generativeai
 
 ### RAG Pipeline
@@ -167,21 +173,25 @@ Phase 2 (Custom Model - Interview Execution):
 resume-griller/
 ├── backend/                      # FastAPI backend
 │   └── app/
+│       ├── graph/               # LangGraph interview orchestration
+│       │   ├── state.py         # InterviewState TypedDict
+│       │   ├── nodes.py         # 9 graph node functions
+│       │   ├── edges.py         # 3 routing functions
+│       │   ├── builder.py       # StateGraph construction
+│       │   ├── services.py      # GraphServices dependency injection
+│       │   └── checkpointer.py  # SQLite checkpoint persistence
 │       ├── api/routes/
 │       │   ├── resume.py        # Resume upload & processing
-│       │   ├── session.py       # Interview session management
+│       │   ├── session.py       # Interview session endpoints (via graph)
 │       │   ├── voice.py         # STT/TTS endpoints
-│       │   └── websocket.py     # Real-time interview handler
+│       │   └── websocket.py     # Real-time interview handler (via graph)
 │       ├── core/
-│       │   ├── interview_agent.py   # Interview orchestration (API mode)
 │       │   └── grilling_engine.py   # Gap detection & follow-ups
 │       ├── services/
 │       │   ├── llm_service.py   # LLM provider abstraction
 │       │   │                    # (Groq, Gemini, OpenAI, Custom, Hybrid)
 │       │   ├── stt_service.py   # Deepgram integration
 │       │   └── tts_service.py   # ElevenLabs integration
-│       ├── db/
-│       │   └── session_store.py # In-memory session storage
 │       ├── config.py            # Settings from .env
 │       └── main.py              # FastAPI app entry
 │
@@ -205,9 +215,11 @@ resume-griller/
 ├── data/
 │   ├── sample_resumes/          # Test resumes
 │   ├── chromadb/                # Vector database
+│   ├── interview_checkpoints.db # LangGraph session state (SQLite)
 │   └── uploads/                 # User uploads
 │
 ├── scripts/
+│   ├── test_graph.py            # Interactive graph test (mock services)
 │   └── start_iap_tunnel.sh      # GCP IAP tunnel helper
 │
 ├── pyproject.toml               # Python project config (uv)
