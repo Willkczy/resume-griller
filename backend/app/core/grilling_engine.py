@@ -70,6 +70,19 @@ class GapAnalysis:
             "priority_gap": self.priority_gap.value if self.priority_gap else None,
         }
 
+    @classmethod
+    def from_dict(cls, data: Dict) -> "GapAnalysis":
+        """Reconstruct GapAnalysis from a dict (e.g., from graph state checkpoint)."""
+        detected = [GapType(g) for g in data.get("detected_gaps", [])]
+        details = {GapType(k): v for k, v in data.get("gap_details", {}).items()}
+        priority = GapType(data["priority_gap"]) if data.get("priority_gap") else None
+        return cls(
+            detected_gaps=detected,
+            gap_details=details,
+            severity=data.get("severity", 0.0),
+            priority_gap=priority,
+        )
+
 
 @dataclass
 class DetailedScores:
@@ -135,6 +148,19 @@ class DetailedScores:
             "overall": self.overall_score,
         }
 
+    @classmethod
+    def from_dict(cls, data: Dict) -> "DetailedScores":
+        """Reconstruct DetailedScores from a dict."""
+        return cls(
+            relevancy=data.get("relevancy", 0.0),
+            clarity=data.get("clarity", 0.0),
+            informativeness=data.get("informativeness", 0.0),
+            specificity=data.get("specificity", 0.0),
+            quantification=data.get("quantification", 0.0),
+            depth=data.get("depth", 0.0),
+            completeness=data.get("completeness", 0.0),
+        )
+
 
 @dataclass
 class AnswerEvaluation:
@@ -160,6 +186,21 @@ class AnswerEvaluation:
             "suggested_follow_up": self.suggested_follow_up,
             "reasoning": self.reasoning,
         }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> "AnswerEvaluation":
+        """Reconstruct AnswerEvaluation from a dict (e.g., from graph state checkpoint)."""
+        return cls(
+            is_sufficient=data.get("is_sufficient", True),
+            score=data.get("score", 0.0),
+            detailed_scores=DetailedScores.from_dict(data.get("detailed_scores", {})),
+            gap_analysis=GapAnalysis.from_dict(data.get("gap_analysis", {})),
+            missing_elements=data.get("missing_elements", []),
+            strengths=data.get("strengths", []),
+            suggested_follow_up=data.get("suggested_follow_up"),
+            reasoning=data.get("reasoning", ""),
+            follow_up_count=data.get("follow_up_count", 0),
+        )
 
 
 # ============== Follow-up Question Templates ==============
