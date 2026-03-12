@@ -1,34 +1,27 @@
 """
 Interview Session API routes.
 
-Supports:
-- "api" model_type: Uses configured LLM (Groq/Gemini/etc)
-- "custom" model_type: Uses Hybrid approach (Groq preprocessing + Custom Model execution)
+Simplified to use the LangGraph interview graph for all orchestration.
+Both "api" and "custom" model types flow through the same graph —
+the difference is in which GraphServices are injected.
+
+The graph handles: question generation, answer evaluation, follow-up
+grilling, advancing, skipping, and interview completion.
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Depends, status, Request
 
-from backend.app.db.session_store import (
-    InterviewSession,
-    SessionStatus,
-    SessionStore,
-    get_session_store,
-)
-from backend.app.core.interview_agent import InterviewAgent, InterviewerResponse
-from backend.app.api.deps import get_retriever, get_llm
-from backend.app.services.llm_service import (
-    BaseLLMService,
-    LLMServiceFactory,
-    HybridModelService,
-)
+from fastapi import APIRouter, HTTPException, Depends, status, Request
+from pydantic import BaseModel, Field
+
+from backend.app.api.deps import get_retriever
+from backend.app.graph import get_compiled_graph, create_initial_state, GraphServices
 from backend.app.middleware.rate_limit import limiter
 from rag.retriever import InterviewRetriever
 
-from pydantic import BaseModel, Field
-
 
 # ============== Request/Response Schemas ==============
+# (unchanged — same API contract for the frontend)
 
 class SessionCreateRequest(BaseModel):
     """Request to create a new interview session."""
@@ -107,7 +100,6 @@ class SessionSummaryResponse(BaseModel):
     total_questions: int
     answers_given: int
     follow_ups_asked: int
-    duration_seconds: float
     conversation_length: int
 
 
@@ -116,50 +108,65 @@ class SessionSummaryResponse(BaseModel):
 router = APIRouter(prefix="/sessions", tags=["interview sessions"])
 
 
-# ============== Helper Functions ==============
+# ============== Helper: invoke graph and build response ==============
 
-def get_llm_service_for_model_type(model_type: str) -> BaseLLMService:
-    """
-    Get LLM service based on model_type.
-    
-    Args:
-        model_type: "api" for cloud APIs (Groq/Gemini), "custom" for Hybrid mode
-    
-    Returns:
-        Appropriate LLM service instance
-    """
-    if model_type == "custom":
-        # Use Hybrid service for custom model
-        try:
-            return LLMServiceFactory.get_hybrid_service()
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Hybrid model service not available: {str(e)}",
-            )
-    else:
-        # Use default API provider (Groq/Gemini/etc based on .env)
-        return LLMServiceFactory.get_service()
-
-
-def get_hybrid_service() -> HybridModelService:
-    """Get the hybrid model service instance."""
-    return LLMServiceFactory.get_hybrid_service()
-
-
-def create_interview_agent(
-    model_type: str,
+async def _invoke_graph(
+    session_id: str,
+    action: str,
     retriever: InterviewRetriever,
-) -> InterviewAgent:
-    """Create InterviewAgent with the appropriate LLM service.
-    
-    Note: InterviewAgent is only used for API mode.
-          Custom mode is handled directly by _process_answer_hybrid().
+    model_type: str = "api",
+    initial_state: dict | None = None,
+    current_answer: str | None = None,
+    prepared_context: dict | None = None,
+) -> InterviewResponseModel:
     """
-    llm_service = get_llm_service_for_model_type(model_type)
-    return InterviewAgent(
-        llm_service=llm_service,
-        retriever=retriever,
+    Invoke the interview graph and convert the result to an API response.
+
+    This is the single point where all session endpoints call the graph.
+    The graph handles all orchestration — this function just translates
+    between HTTP request/response and graph state.
+    """
+    # Create services based on model type (API vs Custom/Hybrid)
+    services = GraphServices.create(model_type, retriever, prepared_context)
+
+    # Get the compiled graph (cached singleton with SQLite checkpointer)
+    graph = await get_compiled_graph()
+
+    # Build the input for this invocation.
+    # For the first invocation ("start"), we pass the full initial state.
+    # For subsequent invocations, we only pass the action + answer.
+    # The checkpointer restores the rest from the previous checkpoint.
+    graph_input: dict = {"action": action}
+    if initial_state:
+        graph_input.update(initial_state)
+    if current_answer:
+        graph_input["current_answer"] = current_answer
+
+    # Invoke the graph with thread_id = session_id for checkpointing
+    result = await graph.ainvoke(
+        graph_input,
+        config={
+            "configurable": {
+                "thread_id": session_id,
+                "services": services,
+            }
+        },
+    )
+
+    # Convert graph output to API response
+    response_data = result.get("response_data", {})
+    return InterviewResponseModel(
+        type=result.get("response_type", "error"),
+        content=result.get("response_content", ""),
+        question_number=response_data.get("question_number"),
+        total_questions=response_data.get("total_questions"),
+        evaluation=response_data.get("evaluation"),
+        metadata={
+            "session_id": session_id,
+            "model_type": model_type,
+            **{k: v for k, v in response_data.items()
+               if k not in ("question_number", "total_questions", "evaluation", "summary")},
+        },
     )
 
 
@@ -170,17 +177,14 @@ def create_interview_agent(
 async def create_session(
     http_request: Request,
     request: SessionCreateRequest,
-    session_store: SessionStore = Depends(get_session_store),
     retriever: InterviewRetriever = Depends(get_retriever),
 ):
     """
     Create a new interview session and start the interview.
-    
-    For "custom" model_type:
-    - Phase 1: Uses Groq to prepare interview context (summary, questions)
-    - Phase 2: Uses Custom Model for interview execution
-    
-    Returns the first question.
+
+    The graph generates questions from the resume and returns the first one.
+    For "custom" model_type, Groq preprocesses the resume first, then the
+    Custom Model is used for evaluation during the interview.
     """
     # Verify resume exists
     try:
@@ -192,167 +196,98 @@ async def create_session(
             )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Resume not found: {request.resume_id}",
         )
-    
-    # Create session
-    session = session_store.create(
-        resume_id=request.resume_id,
-        mode=request.mode,
-        model_type=request.model_type,
-        focus_areas=request.focus_areas,
-        max_follow_ups=request.max_follow_ups,
-    )
-    
-    # For "custom" model_type, use Hybrid approach
+
+    # For custom model, prepare context via Groq first
+    prepared_context = None
     if request.model_type == "custom":
         try:
-            # Get full resume text for preprocessing
+            from backend.app.services.llm_service import LLMServiceFactory
             resume_text = retriever.get_full_resume_text(request.resume_id)
-            
-            # Get hybrid service and prepare context
-            hybrid_service = get_hybrid_service()
-            
-            print(f"[Session] Preparing hybrid interview context for {session.session_id}")
-            
-            # Phase 1: Groq prepares everything
+            hybrid_service = LLMServiceFactory.get_hybrid_service()
             prepared_context = await hybrid_service.prepare_interview_context(
-                session_id=session.session_id,
+                session_id=request.resume_id,  # temporary, real session_id set below
                 resume_text=resume_text,
                 mode=request.mode,
                 num_questions=request.num_questions,
             )
-            
-            # Store prepared questions in session
-            session.questions = prepared_context["questions"]
-            session.status = SessionStatus.IN_PROGRESS
-            session.current_question_index = 0
-            
-            # Store context in session metadata for persistence
-            session.prepared_context = prepared_context
-            
-            # Add first question to conversation
-            if session.questions:
-                from backend.app.db.session_store import MessageRole
-                first_question = session.questions[0]
-                session.add_message(
-                    role=MessageRole.INTERVIEWER,
-                    content=first_question,
-                    metadata={"question_number": 1},
-                )
-            
-            session_store.update(session)
-            
-            return InterviewResponseModel(
-                type="question",
-                content=session.questions[0] if session.questions else "No questions generated",
-                question_number=1,
-                total_questions=len(session.questions),
-                evaluation=None,
-                metadata={
-                    "session_id": session.session_id,
-                    "model_type": "custom",
-                    "mode": request.mode,
-                    "preprocessing": "groq",
-                    "execution": "custom_model",
-                },
-            )
-            
         except Exception as e:
-            print(f"[Session] Hybrid preparation failed: {e}")
-            # Fallback to API mode
-            session.model_type = "api"
-            session_store.update(session)
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Custom model preparation failed: {str(e)}. Try using 'api' model_type instead.",
+                detail=f"Custom model preparation failed: {e}. Try 'api' model_type.",
             )
-    
-    # Standard API mode
-    agent = create_interview_agent(request.model_type, retriever)
-    
-    response = await agent.start_interview(
-        session=session,
+
+    # Generate a session ID
+    import uuid
+    session_id = f"sess_{uuid.uuid4().hex[:12]}"
+
+    # Create initial state for the graph
+    initial = create_initial_state(
+        session_id=session_id,
+        resume_id=request.resume_id,
+        mode=request.mode,
+        model_type=request.model_type,
         num_questions=request.num_questions,
-    )
-    
-    return InterviewResponseModel(
-        type=response.type.value,
-        content=response.content,
-        question_number=response.question_number,
-        total_questions=response.total_questions,
-        evaluation=response.evaluation,
-        metadata={
-            "session_id": session.session_id,
-            "model_type": session.model_type,
-        },
+        max_follow_ups=request.max_follow_ups,
+        focus_areas=request.focus_areas,
+        prepared_context=prepared_context,
     )
 
-
-@router.get("", response_model=List[SessionResponse])
-async def list_sessions(
-    resume_id: Optional[str] = None,
-    session_store: SessionStore = Depends(get_session_store),
-):
-    """List all sessions, optionally filtered by resume_id."""
-    sessions = session_store.list_all(resume_id=resume_id)
-    
-    return [
-        SessionResponse(
-            session_id=s.session_id,
-            resume_id=s.resume_id,
-            mode=s.mode,
-            model_type=s.model_type,
-            status=s.status.value,
-            current_question_index=s.current_question_index,
-            total_questions=len(s.questions),
-            questions_asked=s.current_question_index,
-            created_at=s.created_at.isoformat(),
-            updated_at=s.updated_at.isoformat(),
-        )
-        for s in sessions
-    ]
+    return await _invoke_graph(
+        session_id=session_id,
+        action="start",
+        retriever=retriever,
+        model_type=request.model_type,
+        initial_state=initial,
+        prepared_context=prepared_context,
+    )
 
 
 @router.get("/{session_id}", response_model=SessionDetailResponse)
-async def get_session(
-    session_id: str,
-    session_store: SessionStore = Depends(get_session_store),
-):
-    """Get detailed session information including conversation history."""
-    session = session_store.get(session_id)
-    
-    if not session:
+async def get_session(session_id: str):
+    """Get detailed session information including conversation history from checkpoint."""
+    graph = await get_compiled_graph()
+
+    # Load the latest checkpoint for this session
+    config = {"configurable": {"thread_id": session_id}}
+    state = await graph.aget_state(config)
+
+    if not state or not state.values:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session not found: {session_id}",
         )
-    
+
+    s = state.values
+    questions = s.get("questions", [])
+    idx = s.get("current_question_index", 0)
+
     return SessionDetailResponse(
-        session_id=session.session_id,
-        resume_id=session.resume_id,
-        mode=session.mode,
-        model_type=session.model_type,
-        status=session.status.value,
-        current_question=session.current_question,
-        current_question_index=session.current_question_index,
-        total_questions=len(session.questions),
-        follow_up_count=session.current_follow_up_count,
-        max_follow_ups=session.max_follow_ups,
+        session_id=s.get("session_id", session_id),
+        resume_id=s.get("resume_id", ""),
+        mode=s.get("mode", "mixed"),
+        model_type=s.get("model_type", "api"),
+        status=s.get("status", "pending"),
+        current_question=questions[idx] if idx < len(questions) else None,
+        current_question_index=idx,
+        total_questions=len(questions),
+        follow_up_count=s.get("current_follow_up_count", 0),
+        max_follow_ups=s.get("max_follow_ups", 3),
         conversation=[
             ConversationMessage(
-                role=m.role.value,
-                content=m.content,
-                timestamp=m.timestamp.isoformat(),
-                is_follow_up=m.is_follow_up,
+                role=m.get("role", "system"),
+                content=m.get("content", ""),
+                timestamp=m.get("timestamp", ""),
+                is_follow_up=m.get("is_follow_up", False),
             )
-            for m in session.conversation
+            for m in s.get("conversation", [])
         ],
-        created_at=session.created_at.isoformat(),
-        updated_at=session.updated_at.isoformat(),
+        created_at="",  # Not tracked in graph state (could add if needed)
+        updated_at="",
     )
 
 
@@ -362,324 +297,144 @@ async def submit_answer(
     http_request: Request,
     session_id: str,
     request: AnswerRequest,
-    session_store: SessionStore = Depends(get_session_store),
     retriever: InterviewRetriever = Depends(get_retriever),
 ):
-    """
-    Submit an answer to the current question.
-    
-    For "custom" model_type:
-    - Uses Custom Model with pre-prepared context for evaluation
-    - Generates follow-ups using Custom Model
-    """
-    session = session_store.get(session_id)
-    
-    if not session:
+    """Submit an answer to the current question."""
+    # Load current state to get model_type and prepared_context
+    graph = await get_compiled_graph()
+    config = {"configurable": {"thread_id": session_id}}
+    state = await graph.aget_state(config)
+
+    if not state or not state.values:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session not found: {session_id}",
         )
-    
-    if session.status != SessionStatus.IN_PROGRESS:
+
+    s = state.values
+    if s.get("status") not in ("asking",):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Session is not in progress. Status: {session.status.value}",
+            detail=f"Session is not accepting answers. Status: {s.get('status')}",
         )
-    
-    # For custom model, use hybrid evaluation
-    if session.model_type == "custom":
-        return await _process_answer_hybrid(session, request.answer, session_store)
-    
-    # Standard API mode
-    agent = create_interview_agent(session.model_type, retriever)
-    
-    response = await agent.process_answer(
-        session=session,
-        answer=request.answer,
-    )
-    
-    return InterviewResponseModel(
-        type=response.type.value,
-        content=response.content,
-        question_number=response.question_number,
-        total_questions=response.total_questions,
-        evaluation=response.evaluation,
-        metadata=response.metadata,
-    )
 
-
-async def _process_answer_hybrid(
-    session: InterviewSession,
-    answer: str,
-    session_store: SessionStore,
-) -> InterviewResponseModel:
-    """
-    Process answer using Hybrid approach.
-    
-    Uses GrillingEngine with Custom Model for evaluation and follow-up generation.
-    The Custom Model receives compact prompts with pre-prepared context from Groq.
-    """
-    from backend.app.db.session_store import MessageRole
-    from backend.app.core.grilling_engine import GrillingEngine
-    
-    current_question = session.current_question
-    if not current_question:
-        return InterviewResponseModel(
-            type="complete",
-            content="Interview complete! Thank you for your responses.",
-            metadata={"session_id": session.session_id},
-        )
-    
-    # Add answer to conversation
-    session.add_message(role=MessageRole.CANDIDATE, content=answer)
-    
-    # Get hybrid service and create GrillingEngine with Custom Model
-    hybrid_service = get_hybrid_service()
-    
-    # Restore prepared context if needed
-    prepared_context = {}
-    if hasattr(session, 'prepared_context') and session.prepared_context:
-        prepared_context = session.prepared_context
-        hybrid_service.set_prepared_context(session.session_id, prepared_context)
-    
-    # Create GrillingEngine with Custom Model (interviewer) and prepared context
-    grilling_engine = GrillingEngine(
-        llm_service=hybrid_service.interviewer,  # Use Custom Model
-        model_type="custom",  # Enables compact prompts
-        prepared_context=prepared_context,  # Pass pre-processed context
-    )
-    
-    # Build conversation history
-    conversation_history = [
-        {"role": m.role.value, "content": m.content, "is_follow_up": m.is_follow_up}
-        for m in session.conversation[-10:]
-    ]
-    
-    # Evaluate answer using GrillingEngine (with Custom Model)
-    evaluation = await grilling_engine.evaluate_answer(
-        question=current_question,
-        answer=answer,
-        resume_context="",  # Not needed - using prepared_context
-        question_type=session.mode,
-        conversation_history=conversation_history,
-        follow_up_count=session.current_follow_up_count,
-        question_index=session.current_question_index,
-    )
-    
-    # Use GrillingEngine's decision logic
-    should_followup = grilling_engine.should_grill(
-        evaluation=evaluation,
-        follow_up_count=session.current_follow_up_count,
-        max_follow_ups=session.max_follow_ups,
-    )
-    
-    if should_followup:
-        # Generate follow-up using GrillingEngine (with Custom Model)
-        followup = await grilling_engine.generate_follow_up(
-            question=current_question,
-            answer=answer,
-            evaluation=evaluation,
-            conversation_history=conversation_history,
-            question_type=session.mode,
-        )
-        
-        session.increment_follow_up()
-        session.add_message(
-            role=MessageRole.INTERVIEWER,
-            content=followup,
-            is_follow_up=True,
-            metadata={
-                "gap": evaluation.gap_analysis.priority_gap.value if evaluation.gap_analysis.priority_gap else None,
-                "score": evaluation.score,
-                "detected_gaps": [g.value for g in evaluation.gap_analysis.detected_gaps],
-            },
-        )
-        
-        session_store.update(session)
-        
-        return InterviewResponseModel(
-            type="follow_up",
-            content=followup,
-            question_number=session.current_question_index + 1,
-            total_questions=len(session.questions),
-            evaluation=evaluation.to_dict(),
-            metadata={
-                "follow_up_count": session.current_follow_up_count,
-                "priority_gap": evaluation.gap_analysis.priority_gap.value if evaluation.gap_analysis.priority_gap else None,
-            },
-        )
-    
-    # Move to next question
-    next_question = session.next_question()
-    
-    if next_question is None:
-        session.status = SessionStatus.COMPLETED
-        session.add_message(role=MessageRole.SYSTEM, content="Interview completed.")
-        session_store.update(session)
-        
-        return InterviewResponseModel(
-            type="complete",
-            content="Excellent! That concludes our interview. Thank you for your thoughtful responses.",
-            evaluation=evaluation.to_dict(),
-            metadata={"session_id": session.session_id},
-        )
-    
-    # Ask next question
-    session.add_message(
-        role=MessageRole.INTERVIEWER,
-        content=next_question,
-        metadata={"question_number": session.current_question_index + 1},
-    )
-    
-    session_store.update(session)
-    
-    return InterviewResponseModel(
-        type="question",
-        content=next_question,
-        question_number=session.current_question_index + 1,
-        total_questions=len(session.questions),
-        evaluation=evaluation.to_dict(),
-        metadata={"session_id": session.session_id},
+    return await _invoke_graph(
+        session_id=session_id,
+        action="answer",
+        retriever=retriever,
+        model_type=s.get("model_type", "api"),
+        current_answer=request.answer,
+        prepared_context=s.get("prepared_context"),
     )
 
 
 @router.post("/{session_id}/skip", response_model=InterviewResponseModel)
 async def skip_question(
     session_id: str,
-    session_store: SessionStore = Depends(get_session_store),
     retriever: InterviewRetriever = Depends(get_retriever),
 ):
     """Skip the current question and move to the next one."""
-    session = session_store.get(session_id)
-    
-    if not session:
+    graph = await get_compiled_graph()
+    config = {"configurable": {"thread_id": session_id}}
+    state = await graph.aget_state(config)
+
+    if not state or not state.values:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session not found: {session_id}",
         )
-    
-    if session.status != SessionStatus.IN_PROGRESS:
+
+    s = state.values
+    if s.get("status") not in ("asking",):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Session is not in progress. Status: {session.status.value}",
+            detail=f"Session is not in progress. Status: {s.get('status')}",
         )
-    
-    from backend.app.db.session_store import MessageRole
-    
-    session.add_message(
-        role=MessageRole.CANDIDATE,
-        content="[Skipped]",
-        metadata={"skipped": True},
-    )
-    
-    next_question = session.next_question()
-    
-    if next_question is None:
-        session.status = SessionStatus.COMPLETED
-        session_store.update(session)
-        
-        return InterviewResponseModel(
-            type="complete",
-            content="Interview complete! Thank you for your responses.",
-            metadata={"session_id": session.session_id},
-        )
-    
-    session.add_message(
-        role=MessageRole.INTERVIEWER,
-        content=next_question,
-        metadata={"question_number": session.current_question_index + 1},
-    )
-    
-    session_store.update(session)
-    
-    return InterviewResponseModel(
-        type="question",
-        content=next_question,
-        question_number=session.current_question_index + 1,
-        total_questions=len(session.questions),
-        metadata={"session_id": session.session_id},
+
+    return await _invoke_graph(
+        session_id=session_id,
+        action="skip",
+        retriever=retriever,
+        model_type=s.get("model_type", "api"),
+        prepared_context=s.get("prepared_context"),
     )
 
 
 @router.post("/{session_id}/end", response_model=InterviewResponseModel)
 async def end_session(
     session_id: str,
-    session_store: SessionStore = Depends(get_session_store),
+    retriever: InterviewRetriever = Depends(get_retriever),
 ):
     """End the interview session early."""
-    session = session_store.get(session_id)
-    
-    if not session:
+    graph = await get_compiled_graph()
+    config = {"configurable": {"thread_id": session_id}}
+    state = await graph.aget_state(config)
+
+    if not state or not state.values:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session not found: {session_id}",
         )
-    
-    from backend.app.db.session_store import MessageRole
-    
-    session.status = SessionStatus.CANCELLED
-    session.add_message(
-        role=MessageRole.SYSTEM,
-        content="Interview ended by user.",
-    )
-    
-    session_store.update(session)
-    
-    return InterviewResponseModel(
-        type="complete",
-        content="Interview ended. Thank you for your time.",
-        metadata={"reason": "ended by user", "session_id": session.session_id},
+
+    return await _invoke_graph(
+        session_id=session_id,
+        action="end",
+        retriever=retriever,
+        model_type=state.values.get("model_type", "api"),
+        prepared_context=state.values.get("prepared_context"),
     )
 
 
 @router.get("/{session_id}/summary", response_model=SessionSummaryResponse)
-async def get_session_summary(
-    session_id: str,
-    session_store: SessionStore = Depends(get_session_store),
-):
+async def get_session_summary(session_id: str):
     """Get a summary of the interview session."""
-    session = session_store.get(session_id)
-    
-    if not session:
+    graph = await get_compiled_graph()
+    config = {"configurable": {"thread_id": session_id}}
+    state = await graph.aget_state(config)
+
+    if not state or not state.values:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session not found: {session_id}",
         )
-    
-    from backend.app.db.session_store import MessageRole
-    
-    candidate_messages = [
-        m for m in session.conversation
-        if m.role == MessageRole.CANDIDATE and "[Skipped]" not in m.content
+
+    s = state.values
+    conversation = s.get("conversation", [])
+    candidate_msgs = [
+        m for m in conversation
+        if m.get("role") == "candidate" and m.get("content") != "[Skipped]"
     ]
-    follow_ups = [m for m in session.conversation if m.is_follow_up]
-    
+    follow_ups = [m for m in conversation if m.get("is_follow_up")]
+
     return SessionSummaryResponse(
-        session_id=session.session_id,
-        resume_id=session.resume_id,
-        mode=session.mode,
-        status=session.status.value,
-        questions_asked=session.current_question_index,
-        total_questions=len(session.questions),
-        answers_given=len(candidate_messages),
+        session_id=s.get("session_id", session_id),
+        resume_id=s.get("resume_id", ""),
+        mode=s.get("mode", "mixed"),
+        status=s.get("status", "pending"),
+        questions_asked=s.get("current_question_index", 0),
+        total_questions=len(s.get("questions", [])),
+        answers_given=len(candidate_msgs),
         follow_ups_asked=len(follow_ups),
-        duration_seconds=(session.updated_at - session.created_at).total_seconds(),
-        conversation_length=len(session.conversation),
+        conversation_length=len(conversation),
     )
 
 
 @router.delete("/{session_id}")
-async def delete_session(
-    session_id: str,
-    session_store: SessionStore = Depends(get_session_store),
-):
-    """Delete a session."""
-    success = session_store.delete(session_id)
-    
-    if not success:
+async def delete_session(session_id: str):
+    """Delete a session (removes its checkpoint)."""
+    graph = await get_compiled_graph()
+    config = {"configurable": {"thread_id": session_id}}
+    state = await graph.aget_state(config)
+
+    if not state or not state.values:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session not found: {session_id}",
         )
-    
+
+    # Delete the checkpoint thread
+    from backend.app.graph.checkpointer import get_checkpointer
+    checkpointer = await get_checkpointer()
+    await checkpointer.adelete_thread(session_id)
+
     return {"message": f"Session {session_id} deleted successfully"}
