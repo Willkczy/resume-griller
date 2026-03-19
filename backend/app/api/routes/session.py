@@ -113,7 +113,6 @@ router = APIRouter(prefix="/sessions", tags=["interview sessions"])
 async def _invoke_graph(
     session_id: str,
     action: str,
-    retriever: InterviewRetriever,
     model_type: str = "api",
     initial_state: dict | None = None,
     current_answer: str | None = None,
@@ -127,7 +126,7 @@ async def _invoke_graph(
     between HTTP request/response and graph state.
     """
     # Create services based on model type (API vs Custom/Hybrid)
-    services = GraphServices.create(model_type, retriever, prepared_context)
+    services = GraphServices.create(model_type, prepared_context)
 
     # Get the compiled graph (cached singleton with SQLite checkpointer)
     graph = await get_compiled_graph()
@@ -233,7 +232,6 @@ async def create_session(
     return await _invoke_graph(
         session_id=session_id,
         action="start",
-        retriever=retriever,
         model_type=request.model_type,
         initial_state=initial,
         prepared_context=prepared_context,
@@ -290,7 +288,6 @@ async def submit_answer(
     http_request: Request,
     session_id: str,
     request: AnswerRequest,
-    retriever: InterviewRetriever = Depends(get_retriever),
 ):
     """Submit an answer to the current question."""
     # Load current state to get model_type and prepared_context
@@ -314,7 +311,6 @@ async def submit_answer(
     return await _invoke_graph(
         session_id=session_id,
         action="answer",
-        retriever=retriever,
         model_type=s.get("model_type", "api"),
         current_answer=request.answer,
         prepared_context=s.get("prepared_context"),
@@ -322,10 +318,7 @@ async def submit_answer(
 
 
 @router.post("/{session_id}/skip", response_model=InterviewResponseModel)
-async def skip_question(
-    session_id: str,
-    retriever: InterviewRetriever = Depends(get_retriever),
-):
+async def skip_question(session_id: str):
     """Skip the current question and move to the next one."""
     graph = await get_compiled_graph()
     config = {"configurable": {"thread_id": session_id}}
@@ -347,17 +340,13 @@ async def skip_question(
     return await _invoke_graph(
         session_id=session_id,
         action="skip",
-        retriever=retriever,
         model_type=s.get("model_type", "api"),
         prepared_context=s.get("prepared_context"),
     )
 
 
 @router.post("/{session_id}/end", response_model=InterviewResponseModel)
-async def end_session(
-    session_id: str,
-    retriever: InterviewRetriever = Depends(get_retriever),
-):
+async def end_session(session_id: str):
     """End the interview session early."""
     graph = await get_compiled_graph()
     config = {"configurable": {"thread_id": session_id}}
@@ -372,7 +361,6 @@ async def end_session(
     return await _invoke_graph(
         session_id=session_id,
         action="end",
-        retriever=retriever,
         model_type=state.values.get("model_type", "api"),
         prepared_context=state.values.get("prepared_context"),
     )

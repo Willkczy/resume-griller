@@ -17,7 +17,6 @@ from fastapi.websockets import WebSocketState
 
 from backend.app.config import settings
 from backend.app.graph import get_compiled_graph, create_initial_state, GraphServices
-from backend.app.api.deps import get_retriever
 from backend.app.services.stt_service import get_stt_service
 from backend.app.services.tts_service import get_tts_service
 
@@ -119,8 +118,7 @@ async def invoke_graph_for_ws(
 
     This is the single point where all WS message types call the graph.
     """
-    retriever = get_retriever()
-    services = GraphServices.create(model_type, retriever, prepared_context)
+    services = GraphServices.create(model_type, prepared_context)
     graph = await get_compiled_graph()
 
     graph_input: dict = {"action": action}

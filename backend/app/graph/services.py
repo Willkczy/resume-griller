@@ -29,7 +29,6 @@ from backend.app.services.llm_service import (
     LLMServiceFactory,
     HybridModelService,
 )
-from rag.retriever import InterviewRetriever
 
 
 @dataclass
@@ -39,16 +38,18 @@ class GraphServices:
 
     Created by the route handler based on model_type, then passed
     via LangGraph config so every node can access it.
+
+    Note: retriever is NOT included — the full resume text is stored
+    in InterviewState.full_resume_text, so nodes don't need the retriever.
     """
 
-    retriever: InterviewRetriever
     llm: BaseLLMService
     grilling_engine: GrillingEngine
     # Only set for model_type="custom" — provides preprocessing via Groq
     hybrid_service: HybridModelService | None = None
 
     @classmethod
-    def for_api_mode(cls, retriever: InterviewRetriever) -> "GraphServices":
+    def for_api_mode(cls) -> "GraphServices":
         """
         Create services for API mode (Groq/Gemini/OpenAI/Claude).
 
@@ -57,7 +58,6 @@ class GraphServices:
         """
         llm = LLMServiceFactory.get_service()
         return cls(
-            retriever=retriever,
             llm=llm,
             grilling_engine=GrillingEngine(llm),
         )
@@ -65,7 +65,6 @@ class GraphServices:
     @classmethod
     def for_custom_mode(
         cls,
-        retriever: InterviewRetriever,
         prepared_context: dict | None = None,
     ) -> "GraphServices":
         """
@@ -77,8 +76,7 @@ class GraphServices:
         """
         hybrid = LLMServiceFactory.get_hybrid_service()
         return cls(
-            retriever=retriever,
-            llm=hybrid.interviewer,  # Custom Model for interview execution
+            llm=hybrid.interviewer,
             grilling_engine=GrillingEngine(
                 llm_service=hybrid.interviewer,
                 model_type="custom",
@@ -91,15 +89,14 @@ class GraphServices:
     def create(
         cls,
         model_type: str,
-        retriever: InterviewRetriever,
         prepared_context: dict | None = None,
     ) -> "GraphServices":
         """
         Factory method — picks the right mode based on model_type.
 
         This is the main entry point used by route handlers:
-          services = GraphServices.create(session.model_type, retriever, prepared_context)
+          services = GraphServices.create(model_type, prepared_context)
         """
         if model_type == "custom":
-            return cls.for_custom_mode(retriever, prepared_context)
-        return cls.for_api_mode(retriever)
+            return cls.for_custom_mode(prepared_context)
+        return cls.for_api_mode()
