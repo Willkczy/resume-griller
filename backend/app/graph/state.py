@@ -46,6 +46,7 @@ class InterviewState(TypedDict, total=False):
     # ─── Identity (set once at creation, never changes) ───
     session_id: str
     resume_id: str
+    full_resume_text: str  # LLM-parsed resume, passed to all nodes
     mode: Literal["hr", "tech", "mixed"]
     model_type: Literal["api", "custom"]
 
@@ -128,12 +129,14 @@ def create_initial_state(
     max_follow_ups: int = 3,
     focus_areas: list[str] | None = None,
     prepared_context: dict | None = None,
+    full_resume_text: str = "",
 ) -> InterviewState:
     """Create the initial state for a new interview session."""
     return InterviewState(
         # Identity
         session_id=session_id,
         resume_id=resume_id,
+        full_resume_text=full_resume_text,
         mode=mode,
         model_type=model_type,
         # Config

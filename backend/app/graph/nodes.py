@@ -99,17 +99,29 @@ async def generate_questions(
             "status": "asking",
         }
 
-    # API mode: generate questions via RAG + LLM
+    # API mode: generate questions via LLM using full resume text
     try:
         focus_area = focus_areas[0] if focus_areas else None
+        resume_text = state.get("full_resume_text", "")
 
-        # Step 1: Build RAG prompt (retrieves relevant resume chunks)
-        prompt = services.retriever.build_prompt(
-            resume_id=resume_id,
-            focus_area=focus_area,
-            question_type=mode,
-            n_questions=num_questions,
-        )
+        # Step 1: Build prompt with full resume context
+        if mode in ["technical", "tech"]:
+            instruction = f"Generate {num_questions} TECHNICAL interview questions focusing on the candidate's skills, projects, architecture decisions, and technical implementation details."
+        elif mode in ["behavioral", "hr"]:
+            instruction = f"Generate {num_questions} BEHAVIORAL interview questions using STAR format (Tell me about a time...). Focus on teamwork, leadership, challenges, and soft skills. Do NOT ask technical implementation questions."
+        else:
+            instruction = f"Generate {num_questions} interview questions (mix of technical and behavioral) based on the candidate's resume."
+
+        if focus_area:
+            instruction += f" Focus specifically on: {focus_area}."
+
+        prompt = f"""You are an expert interviewer. {instruction}
+
+Here is the candidate's resume information:
+
+{resume_text}
+
+Generate specific, relevant interview questions based on this resume."""
 
         # Step 2: Create mode-specific system prompt
         system_prompt = _build_question_generation_prompt(mode, num_questions)
@@ -159,13 +171,10 @@ async def ask_question(
     state: InterviewState, config: RunnableConfig
 ) -> dict:
     """Prepare the current question for the candidate."""
-    services = _get_services(config)
-
     idx = state["current_question_index"]
     questions = state["questions"]
 
     if idx >= len(questions):
-        # No more questions — shouldn't happen, but handle gracefully
         return {
             "response_type": "complete",
             "response_content": "Interview complete! Thank you for your responses.",
@@ -175,21 +184,9 @@ async def ask_question(
 
     question = questions[idx]
 
-    # Retrieve relevant resume context for this question (for future evaluation)
-    resume_context = ""
-    try:
-        chunks = services.retriever.retrieve(
-            resume_id=state["resume_id"],
-            focus_area=question,
-            n_chunks=3,
-        )
-        resume_context = "\n\n".join(
-            c.get("content", "") for c in chunks if c.get("content")
-        )
-    except Exception:
-        pass  # Non-critical — evaluation can work without context
+    # Use full resume text from state (no per-question retrieval needed)
+    resume_context = state.get("full_resume_text", "")
 
-    # Build the interviewer message
     msg = _msg("interviewer", question, question_number=idx + 1)
 
     return {
