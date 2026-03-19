@@ -15,6 +15,13 @@ This file provides guidance to Claude Code when working with this repository.
 - `session.py` simplified from 679 to ~280 lines
 - `websocket.py` simplified from 776 to ~270 lines
 
+**Recently completed — Full Resume Context**:
+- Resume parsing at upload now uses Groq LLM instead of regex-based parser
+- Parsed resumes saved as structured markdown to `data/parsed_resumes/{resume_id}.md`
+- Full resume text stored in `InterviewState.full_resume_text` — no per-question retrieval
+- `GraphServices` no longer carries a retriever — graph nodes read resume from state
+- `rag/resume_parser.py`, `chunker.py`, `embedder.py` are legacy (kept for fallback)
+
 **Remaining**:
 - Test coverage (<5%, target 70%+)
 - Authentication (JWT)
@@ -84,7 +91,7 @@ Backend (FastAPI)
     ├── Grilling Engine              ← 18 gap types, 7D scoring
     ├── LLM Service                  ← Groq/Gemini/OpenAI/Claude/Custom/Hybrid
     ├── Voice Services               ← Deepgram STT, ElevenLabs TTS
-    └── RAG Pipeline                 ← ChromaDB + sentence-transformers
+    └── Resume Processing            ← LLM parsing at upload, full text in state
 ```
 
 ### LangGraph Interview Flow
@@ -108,14 +115,15 @@ START -> route_action
 - Fresh invocation pattern (not LangGraph interrupts): each request runs the full graph
 - `session_id` = LangGraph `thread_id` for checkpoint keying
 - Services injected via config: `config["configurable"]["services"]`
-- Graph nodes are thin wrappers delegating to GrillingEngine, LLM, RAG
+- Graph nodes are thin wrappers delegating to GrillingEngine, LLM
+- Full resume text stored in state — no per-question RAG retrieval
 
 ### How routes use the graph
 
 ```python
 from backend.app.graph import get_compiled_graph, create_initial_state, GraphServices
 
-services = GraphServices.create(model_type, retriever, prepared_context)
+services = GraphServices.create(model_type, prepared_context)
 graph = await get_compiled_graph()
 result = await graph.ainvoke(
     {"action": "answer", "current_answer": "..."},
@@ -168,15 +176,15 @@ resume-griller/
 │   ├── stores/interviewStore.ts      # Zustand state management
 │   └── lib/                          # API client, WebSocket client
 │
-├── rag/                              # RAG Pipeline
-│   ├── resume_parser.py              # PDF/TXT parser (464 lines)
-│   ├── chunker.py                    # Semantic chunking (224 lines)
-│   ├── embedder.py                   # ChromaDB operations (282 lines)
-│   ├── retriever.py                  # Context retrieval (268 lines)
+├── rag/                              # Resume Processing
+│   ├── retriever.py                  # LLM-based parsing + full text retrieval
+│   ├── resume_parser.py              # Legacy: regex PDF/TXT parser
+│   ├── chunker.py                    # Legacy: semantic chunking
+│   ├── embedder.py                   # Legacy: ChromaDB operations
 │   └── generator.py                  # LoRA model inference (185 lines)
 │
 ├── scripts/test_graph.py             # Interactive graph test (mock services)
-├── data/                             # Uploads, ChromaDB, checkpoints
+├── data/                             # Uploads, parsed resumes, ChromaDB, checkpoints
 ├── tests/                            # pytest tests
 ├── pyproject.toml                    # Python deps (uv)
 └── docker-compose.yml                # Multi-service orchestration
@@ -191,7 +199,7 @@ resume-griller/
 The central orchestration layer. Replaces the old `InterviewAgent` class.
 
 **state.py** — `InterviewState` TypedDict with fields for:
-- Identity (session_id, resume_id, mode, model_type)
+- Identity (session_id, resume_id, full_resume_text, mode, model_type)
 - Config (num_questions, max_follow_ups, focus_areas)
 - Flow state (status, questions, current_question_index, follow_up_count)
 - Current interaction (current_answer, current_evaluation)
@@ -200,8 +208,8 @@ The central orchestration layer. Replaces the old `InterviewAgent` class.
 - Input signal (action: start/answer/skip/end)
 
 **nodes.py** — 9 async node functions:
-- `generate_questions` — RAG + LLM question generation
-- `ask_question` — format current question, retrieve RAG context
+- `generate_questions` — LLM question generation from full resume text
+- `ask_question` — format current question, set resume context from state
 - `evaluate_answer` — GrillingEngine evaluation + consistency check
 - `generate_follow_up` — targeted follow-up from detected gaps
 - `advance_question` — increment index, reset follow-up count
@@ -214,8 +222,8 @@ The central orchestration layer. Replaces the old `InterviewAgent` class.
 - `route_after_advance` — more questions or done
 
 **services.py** — `GraphServices` dataclass for DI:
-- `GraphServices.create(model_type, retriever)` — factory
-- Bundles: retriever, llm, grilling_engine, hybrid_service
+- `GraphServices.create(model_type, prepared_context)` — factory
+- Bundles: llm, grilling_engine, hybrid_service (no retriever)
 
 **checkpointer.py** — `get_compiled_graph()` singleton:
 - Uses `AsyncSqliteSaver` for persistent state
@@ -240,10 +248,16 @@ Unified interface for 6 providers:
 5. **Custom Model** — vLLM on GCP with LoRA adapter
 6. **Hybrid** — Groq preprocessing + Custom Model execution
 
-### RAG Pipeline (`rag/`)
+### Resume Processing (`rag/retriever.py`)
 
-Resume parsing → semantic chunking → ChromaDB embeddings → retrieval.
-Used by `generate_questions` and `ask_question` graph nodes.
+At upload time, Groq LLM parses raw PDF text into structured markdown
+(`data/parsed_resumes/{resume_id}.md`). During interviews, the full
+parsed text is stored in `InterviewState.full_resume_text` — no
+per-question ChromaDB retrieval.
+
+**Legacy files** (kept for backward compat with old resumes):
+- `rag/resume_parser.py` — regex-based parser (fallback text extraction)
+- `rag/chunker.py`, `rag/embedder.py` — no longer called in active flow
 
 ---
 
@@ -267,7 +281,10 @@ VOICE_ENABLED=false
 DEEPGRAM_API_KEY=...
 ELEVENLABS_API_KEY=...
 
-# RAG
+# Resume processing
+PARSED_RESUME_DIR=./data/parsed_resumes
+
+# RAG (legacy, for old resumes)
 CHROMA_PERSIST_DIR=./data/chromadb
 EMBEDDING_MODEL=all-MiniLM-L6-v2
 
