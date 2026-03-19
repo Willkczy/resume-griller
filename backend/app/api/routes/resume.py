@@ -80,12 +80,12 @@ async def upload_resume(
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        # Process resume through RAG pipeline
-        retriever.process_resume(str(file_path), resume_id)
-        
+        # Process resume: extract text → LLM parse → save structured markdown
+        await retriever.process_resume(str(file_path), resume_id)
+
         # Get summary info
         summary = retriever.get_resume_summary(resume_id)
-        
+
         return ResumeUploadResponse(
             resume_id=resume_id,
             filename=file.filename,
@@ -112,49 +112,23 @@ async def get_resume_summary(
     """Get summary information for a processed resume."""
     try:
         summary = retriever.get_resume_summary(resume_id)
-        
+
         if summary["total_chunks"] == 0:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Resume not found: {resume_id}",
             )
-        
-        # Extract additional info from chunks
-        chunks = retriever.embedder.get_all_chunks(resume_id)
-        
-        skills = []
-        experience_count = 0
-        education_count = 0
-        name = None
-        
-        for chunk in chunks:
-            metadata = chunk.get("metadata", {})
-            section = metadata.get("section", "")
-            
-            if section == "skills":
-                skills_str = metadata.get("skills_list", "")
-                if skills_str:
-                    skills = [s.strip() for s in skills_str.split(",")]
-            elif section == "experience":
-                experience_count += 1
-            elif section == "education":
-                education_count += 1
-            elif section == "overview":
-                # Try to extract name from contact info
-                contact = metadata.get("contact", {})
-                if isinstance(contact, dict):
-                    name = contact.get("name")
-        
+
         return ResumeSummary(
             resume_id=resume_id,
-            name=name,
+            name=summary.get("name"),
             total_chunks=summary["total_chunks"],
             sections=summary["sections"],
-            skills=skills[:20],  # Limit to 20 skills
-            experience_count=experience_count,
-            education_count=education_count,
+            skills=summary.get("skills", [])[:20],
+            experience_count=summary.get("experience_count", 0),
+            education_count=summary.get("education_count", 0),
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -171,9 +145,18 @@ async def delete_resume(
 ):
     """Delete a resume and its embeddings."""
     try:
-        # Delete from vector database
-        retriever.embedder._delete_resume(resume_id)
-        
+        # Delete parsed resume file
+        parsed_path = Path(settings.PARSED_RESUME_DIR) / f"{resume_id}.md"
+        if parsed_path.exists():
+            os.remove(parsed_path)
+
+        # Delete from vector database (old resumes)
+        if retriever.embedder:
+            try:
+                retriever.embedder._delete_resume(resume_id)
+            except Exception:
+                pass  # May not exist in ChromaDB
+
         # Delete uploaded file if exists
         upload_dir = ensure_upload_dir()
         for ext in settings.ALLOWED_EXTENSIONS:
@@ -181,7 +164,7 @@ async def delete_resume(
             if file_path.exists():
                 os.remove(file_path)
                 break
-        
+
         return {"message": f"Resume {resume_id} deleted successfully"}
         
     except Exception as e:

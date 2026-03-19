@@ -47,6 +47,7 @@ wandb/
 *.sqlite3
 data/uploads/
 data/chromadb/
+data/parsed_resumes/*.md
 
 # --- IDE Settings ---
 .idea/

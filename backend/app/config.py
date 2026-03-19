@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     CHROMA_PERSIST_DIR: str = "./data/chromadb"
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     
+    # Parsed resume storage
+    PARSED_RESUME_DIR: str = "./data/parsed_resumes"
+
     # File upload settings
     UPLOAD_DIR: str = "./data/uploads"
     MAX_UPLOAD_SIZE: int = 10 * 1024 * 1024  # 10MB
