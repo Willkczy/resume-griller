@@ -619,7 +619,7 @@ QUESTION: {question}
 
 ANSWER: {answer}
 
-{f"RESUME CONTEXT: {resume_context[:800]}" if resume_context else ""}
+{f"RESUME CONTEXT: {resume_context[:4000]}" if resume_context else ""}
 
 {f"CONVERSATION: {history_context}" if history_context else ""}
 
@@ -962,7 +962,7 @@ Return ONLY the question."""
         
         prompt = f"""Compare answer with resume.
 
-RESUME: {resume_context[:800]}
+RESUME: {resume_context[:4000]}
 QUESTION: {question}
 ANSWER: {answer}
 

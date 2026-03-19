@@ -227,6 +227,7 @@ async def create_session(
         max_follow_ups=request.max_follow_ups,
         focus_areas=request.focus_areas,
         prepared_context=prepared_context,
+        full_resume_text=full_resume_text,
     )
 
     return await _invoke_graph(
