@@ -766,7 +766,10 @@ class LLMServiceFactory:
     _hybrid_instance: Optional[HybridModelService] = None
     
     @classmethod
-    def get_service(cls) -> BaseLLMService:
+    def get_service(cls, provider: Optional[str] = None) -> BaseLLMService:
+        """Get LLM service. If provider is specified, creates a fresh instance (not cached)."""
+        if provider and provider != settings.LLM_PROVIDER:
+            return cls._create_service(provider_override=provider)
         if cls._instance is None:
             cls._instance = cls._create_service()
         return cls._instance
@@ -779,44 +782,45 @@ class LLMServiceFactory:
         return cls._hybrid_instance
     
     @classmethod
-    def _create_service(cls) -> BaseLLMService:
+    def _create_service(cls, provider_override: Optional[str] = None) -> BaseLLMService:
+        provider = provider_override or settings.LLM_PROVIDER
         # API mode
-        if settings.LLM_PROVIDER == "anthropic":
+        if provider == "anthropic":
             if not settings.ANTHROPIC_API_KEY:
                 raise ValueError("ANTHROPIC_API_KEY not set")
             print("Initializing Anthropic (Claude) Service")
             return AnthropicService()
         
-        elif settings.LLM_PROVIDER == "openai":
+        elif provider == "openai":
             if not settings.OPENAI_API_KEY:
                 raise ValueError("OPENAI_API_KEY not set")
             print("Initializing OpenAI Service")
             return OpenAIService()
         
-        elif settings.LLM_PROVIDER == "gemini":
+        elif provider == "gemini":
             if not settings.GOOGLE_API_KEY:
                 raise ValueError("GOOGLE_API_KEY not set")
             print("Initializing Google Gemini Service")
             return GeminiService()
         
-        elif settings.LLM_PROVIDER == "groq":
+        elif provider == "groq":
             if not settings.GROQ_API_KEY:
                 raise ValueError("GROQ_API_KEY not set")
             print("Initializing Groq Service")
             return GroqService()
         
-        elif settings.LLM_PROVIDER == "custom":
+        elif provider == "custom":
             if not settings.CUSTOM_MODEL_URL:
                 raise ValueError("CUSTOM_MODEL_URL not set")
             print("Initializing Custom Model Service (GCP VM)")
             return CustomModelService()
         
-        elif settings.LLM_PROVIDER == "hybrid":
+        elif provider == "hybrid":
             print("Initializing Hybrid Model Service")
             return cls.get_hybrid_service()
         
         else:
-            raise ValueError(f"Unknown LLM provider: {settings.LLM_PROVIDER}")
+            raise ValueError(f"Unknown LLM provider: {provider}")
     
     @classmethod
     def reset(cls):

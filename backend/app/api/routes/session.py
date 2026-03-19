@@ -187,16 +187,8 @@ async def create_session(
     Custom Model is used for evaluation during the interview.
     """
     # Verify resume exists
-    try:
-        summary = retriever.get_resume_summary(request.resume_id)
-        if summary.get("total_chunks", 0) == 0:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Resume not found: {request.resume_id}",
-            )
-    except HTTPException:
-        raise
-    except Exception:
+    full_resume_text = retriever.get_full_resume_text(request.resume_id)
+    if not full_resume_text:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Resume not found: {request.resume_id}",
