@@ -3,13 +3,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { getSessionSummary, getSession } from '@/lib/api';
-import type { SessionSummary, SessionDetail } from '@/types';
+import { getSessionSummary } from '@/lib/api';
+import type { SessionSummary } from '@/types';
 import { 
   CheckCircle, 
   Clock, 
@@ -23,23 +23,17 @@ import { formatDuration } from '@/lib/utils';
 
 export default function ResultPage() {
   const params = useParams();
-  const router = useRouter();
   const sessionId = params.sessionId as string;
   
   const [summary, setSummary] = useState<SessionSummary | null>(null);
-  const [session, setSession] = useState<SessionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [summaryData, sessionData] = await Promise.all([
-          getSessionSummary(sessionId),
-          getSession(sessionId),
-        ]);
+        const summaryData = await getSessionSummary(sessionId);
         setSummary(summaryData);
-        setSession(sessionData);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load results');
       } finally {
@@ -76,7 +70,9 @@ export default function ResultPage() {
     );
   }
 
-  const completionRate = (summary.questions_asked / summary.total_questions) * 100;
+  const completionRate = summary.total_questions
+    ? (summary.questions_asked / summary.total_questions) * 100
+    : 0;
 
   return (
     <div className="container mx-auto max-w-2xl px-4 py-12">
@@ -85,7 +81,7 @@ export default function ResultPage() {
         <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
         <h1 className="text-3xl font-bold mb-2">Interview Complete!</h1>
         <p className="text-gray-600">
-          Here's a summary of your mock interview session
+          Here&apos;s a summary of your mock interview session
         </p>
       </div>
 
@@ -97,7 +93,7 @@ export default function ResultPage() {
               <MessageSquare className="w-8 h-8 text-blue-500" />
               <div>
                 <p className="text-2xl font-bold">{summary.questions_asked}</p>
-                <p className="text-sm text-gray-500">Questions Answered</p>
+                <p className="text-sm text-gray-500">Questions Covered</p>
               </div>
             </div>
           </CardContent>

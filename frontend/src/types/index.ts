@@ -83,7 +83,7 @@ export interface InterviewResponse {
   question_number?: number;
   total_questions?: number;
   evaluation?: AnswerEvaluation;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface AnswerEvaluation {
@@ -112,11 +112,30 @@ export type WSMessageType =
   | 'transcript'
   | 'pong';
 
+export interface WSMessageData {
+  session_id?: string;
+  resume_id?: string;
+  mode?: InterviewMode;
+  model_type?: ModelType;
+  status?: SessionStatus;
+  current_question?: string | null;
+  question_number?: number;
+  total_questions?: number;
+  confidence?: number;
+  [key: string]: unknown;
+}
+
+export interface WSClientMessageData {
+  num_questions?: number;
+  voice_enabled?: boolean;
+  [key: string]: unknown;
+}
+
 export interface WSMessage {
   type: WSMessageType;
   content?: string;
   timestamp?: string;
-  data?: Record<string, any>;
+  data?: WSMessageData;
   error?: string;
   audio_base64?: string;
 }
@@ -124,7 +143,7 @@ export interface WSMessage {
 export interface WSClientMessage {
   type: 'start' | 'answer' | 'answer_audio' | 'skip' | 'end' | 'ping';
   content?: string;
-  data?: Record<string, any>;
+  data?: WSClientMessageData;
 }
 
 // ============== Voice Types ==============

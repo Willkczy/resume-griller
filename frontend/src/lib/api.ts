@@ -4,7 +4,6 @@ import type {
   ResumeUploadResponse,
   ResumeSummary,
   SessionCreateRequest,
-  SessionResponse,
   SessionDetail,
   SessionSummary,
   InterviewResponse,
@@ -84,11 +83,6 @@ export async function createSession(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   });
-}
-
-export async function listSessions(resumeId?: string): Promise<SessionResponse[]> {
-  const query = resumeId ? `?resume_id=${resumeId}` : '';
-  return fetchApi(`/api/v1/sessions${query}`);
 }
 
 export async function getSession(sessionId: string): Promise<SessionDetail> {
