@@ -15,7 +15,6 @@ __pycache__/
 venv/
 env/
 .uv/
-uv.lock
 
 # --- Node.js / Frontend ---
 **/node_modules
@@ -66,14 +65,16 @@ Thumbs.db
 dist/
 build/
 develop-eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 
 # --- Test & Temporary Files ---
 test_*.mp3
 test_*.wav
 *.tmp
 *.temp
+.coverage
+htmlcov/
 
 # --- Claude / Worktrees ---
 .claude/settings.local.json
