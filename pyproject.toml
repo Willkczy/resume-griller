@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "AI-powered interview simulator that grills candidates with resume-specific questions"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "MIT"
 authors = [
     { name = "Your Name", email = "your.email@example.com" }
 ]
@@ -34,6 +34,7 @@ dependencies = [
     "anthropic>=0.18.0",
     "openai>=1.12.0",
     "groq>=0.37.1",
+    "google-generativeai>=0.8.0",
     "langgraph>=1.0.6",
     "langgraph-checkpoint-sqlite>=3.0.2",
     # Logging
@@ -65,9 +66,9 @@ dev = [
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-# Explicitly specify which packages to include
-packages = ["rag", "backend", "backend.app", "backend.app.api", "backend.app.api.routes", "backend.app.core", "backend.app.services", "backend.app.models", "backend.app.db"]
+[tool.setuptools.packages.find]
+include = ["backend*", "rag*"]
+exclude = ["frontend*", "ml*", "scripts*", "tests*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.json", "*.yaml", "*.yml"]
@@ -94,6 +95,19 @@ exclude = '''
 [tool.ruff]
 line-length = 88
 target-version = "py311"
+exclude = [
+    "frontend",
+    "data",
+    "ml",
+    ".venv",
+    "scripts/ml",
+    "rag/chunker.py",
+    "rag/embedder.py",
+    "rag/generator.py",
+    "rag/resume_parser.py",
+]
+
+[tool.ruff.lint]
 select = [
     "E",   # pycodestyle errors
     "W",   # pycodestyle warnings
@@ -106,15 +120,10 @@ select = [
 ignore = [
     "E501",  # line too long (handled by black)
     "B008",  # do not perform function calls in argument defaults
-]
-exclude = [
-    "frontend",
-    "data",
-    "ml",
-    ".venv",
+    "B904",  # API routes intentionally translate provider errors to HTTP errors
 ]
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["backend", "rag"]
 
 [tool.mypy]
