@@ -6,7 +6,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## Current Status
 
-**Branch**: `feature/langgraph-interview-agent` (active migration)
+**Branch**: `codex/stabilize-phase-1` (stabilization baseline)
 
 **Recently completed — LangGraph Migration (Steps 1-6 of 7)**:
 - Consolidated ~2000 lines of duplicated interview orchestration into a single LangGraph StateGraph
@@ -54,12 +54,6 @@ cd frontend && npm install && npm run dev
 ```
 
 Frontend: `http://localhost:3000`
-
-### Docker Compose
-
-```bash
-cp .env.example .env && docker-compose up -d
-```
 
 ### Tests
 
@@ -187,7 +181,6 @@ resume-griller/
 ├── data/                             # Uploads, parsed resumes, ChromaDB, checkpoints
 ├── tests/                            # pytest tests
 ├── pyproject.toml                    # Python deps (uv)
-└── docker-compose.yml                # Multi-service orchestration
 ```
 
 ---
