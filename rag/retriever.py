@@ -7,13 +7,12 @@ During interviews, the full parsed resume is passed in state — no per-question
 """
 
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import pdfplumber
 
 from backend.app.config import settings
-
 
 # ============== LLM Resume Parsing Prompt ==============
 
@@ -68,13 +67,21 @@ class InterviewRetriever:
     Interview flow: read saved markdown from disk (full resume in state)
     """
 
-    def __init__(self, embedder=None):
-        # embedder kept for backward compat (old resumes fallback)
-        self.embedder = embedder
+    def __init__(self, embedder=None, embedder_factory: Callable | None = None):
+        # The legacy embedder is initialized only when a Markdown resume is absent.
+        self._embedder = embedder
+        self._embedder_factory = embedder_factory
         self._parsed_dir = Path(settings.PARSED_RESUME_DIR)
         self._parsed_dir.mkdir(parents=True, exist_ok=True)
 
-    async def process_resume(self, file_path: str, resume_id: Optional[str] = None) -> str:
+    @property
+    def embedder(self):
+        """Return the legacy embedder, creating it lazily when needed."""
+        if self._embedder is None and self._embedder_factory is not None:
+            self._embedder = self._embedder_factory()
+        return self._embedder
+
+    async def process_resume(self, file_path: str, resume_id: str | None = None) -> str:
         """
         Process a resume: extract text, parse with LLM, save structured output.
 
@@ -86,7 +93,7 @@ class InterviewRetriever:
         # Step 1: Extract raw text from PDF/TXT
         raw_text = self._extract_text(file_path)
         if not raw_text.strip():
-            raise ValueError(f"Could not extract text from {file_path}")
+            raise ValueError("Resume contains no extractable text")
 
         # Step 2: Parse with LLM (Groq)
         parsed_text = await self._parse_with_llm(raw_text)
@@ -95,22 +102,28 @@ class InterviewRetriever:
         output_path = self._parsed_dir / f"{resume_id}.md"
         output_path.write_text(parsed_text, encoding="utf-8")
 
-        print(f"[Retriever] Processed resume: {resume_id} ({len(parsed_text)} chars) -> {output_path}")
+        print(
+            f"[Retriever] Processed resume: {resume_id} ({len(parsed_text)} chars) -> {output_path}"
+        )
         return resume_id
 
     def _extract_text(self, file_path: str) -> str:
         """Extract raw text from PDF or text file."""
         path = Path(file_path)
-        if path.suffix.lower() == ".pdf":
-            text_parts = []
-            with pdfplumber.open(file_path) as pdf:
-                for page in pdf.pages:
-                    page_text = page.extract_text()
-                    if page_text:
-                        text_parts.append(page_text)
-            return "\n".join(text_parts)
-        else:
-            return path.read_text(encoding="utf-8")
+        try:
+            if path.suffix.lower() == ".pdf":
+                text_parts = []
+                with pdfplumber.open(file_path) as pdf:
+                    for page in pdf.pages:
+                        page_text = page.extract_text()
+                        if page_text:
+                            text_parts.append(page_text)
+                return "\n".join(text_parts)
+            if path.suffix.lower() == ".txt":
+                return path.read_text(encoding="utf-8")
+            raise ValueError("Unsupported resume type; use PDF or TXT")
+        except (OSError, UnicodeError) as exc:
+            raise ValueError("Unable to read resume file") from exc
 
     async def _parse_with_llm(self, raw_text: str) -> str:
         """Call Groq LLM to parse raw resume text into structured markdown."""
@@ -119,13 +132,23 @@ class InterviewRetriever:
         llm = LLMServiceFactory.get_service(provider="groq")
         prompt = RESUME_PARSE_PROMPT.format(raw_text=raw_text)
 
-        response = await llm.generate(
-            prompt=prompt,
-            system_prompt="You are a precise resume parser. Output only structured markdown.",
-            temperature=0.1,
-            max_tokens=3000,
-        )
-        return response.strip()
+        try:
+            response = await llm.generate(
+                prompt=prompt,
+                system_prompt=(
+                    "You are a precise resume parser. "
+                    "Output only structured markdown."
+                ),
+                temperature=0.1,
+                max_tokens=3000,
+            )
+        except Exception as exc:
+            raise RuntimeError("Resume parsing service failed") from exc
+
+        parsed = response.strip()
+        if not parsed:
+            raise RuntimeError("Resume parsing service returned an empty result")
+        return parsed
 
     def get_full_resume_text(self, resume_id: str) -> str:
         """
@@ -175,7 +198,7 @@ class InterviewRetriever:
             print(f"[Retriever] Error in chunk fallback: {e}")
             return ""
 
-    def get_resume_summary(self, resume_id: str) -> Dict:
+    def get_resume_summary(self, resume_id: str) -> dict:
         """Get a summary of the processed resume."""
         parsed_path = self._parsed_dir / f"{resume_id}.md"
         if parsed_path.exists():
@@ -192,7 +215,7 @@ class InterviewRetriever:
             "preview": {},
         }
 
-    def _summary_from_parsed(self, resume_id: str, parsed_path: Path) -> Dict:
+    def _summary_from_parsed(self, resume_id: str, parsed_path: Path) -> dict:
         """Build summary from LLM-parsed markdown file."""
         text = parsed_path.read_text(encoding="utf-8")
 
@@ -223,7 +246,11 @@ class InterviewRetriever:
         )
         # Simpler: count ### under EDUCATION
         edu_section = re.search(r"## EDUCATION\n(.*?)(?:\n##|\Z)", text, re.DOTALL)
-        education_count = len(re.findall(r"^###", edu_section.group(1), re.MULTILINE)) if edu_section else 0
+        education_count = (
+            len(re.findall(r"^###", edu_section.group(1), re.MULTILINE))
+            if edu_section
+            else 0
+        )
 
         return {
             "resume_id": resume_id,
@@ -236,7 +263,7 @@ class InterviewRetriever:
             "education_count": education_count,
         }
 
-    def _summary_from_chunks(self, resume_id: str) -> Dict:
+    def _summary_from_chunks(self, resume_id: str) -> dict:
         """Fallback: summary from ChromaDB chunks."""
         chunks = self.embedder.get_all_chunks(resume_id)
         sections = {}
@@ -256,7 +283,7 @@ class InterviewRetriever:
     def build_prompt(
         self,
         resume_id: str,
-        focus_area: Optional[str] = None,
+        focus_area: str | None = None,
         question_type: str = "mixed",
         n_questions: int = 5,
     ) -> str:
