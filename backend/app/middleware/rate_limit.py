@@ -2,10 +2,10 @@
 Rate limiting middleware using SlowAPI.
 """
 
+from fastapi import Request
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from fastapi import Request, Response
+from slowapi.util import get_remote_address
 
 
 def get_identifier(request: Request) -> str:

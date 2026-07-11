@@ -31,16 +31,14 @@ We use AsyncSqliteSaver since this app runs on a single server.
 The DB file is stored at data/interview_checkpoints.db.
 """
 
-from contextlib import asynccontextmanager
-
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
+from backend.app.config import settings
 from backend.app.graph.builder import build_interview_graph
-
 
 # Path for the SQLite checkpoint database.
 # Stored alongside other data files. Each session_id gets its own "thread".
-CHECKPOINT_DB_PATH = "data/interview_checkpoints.db"
+CHECKPOINT_DB_PATH = settings.CHECKPOINT_DB_PATH
 
 # Singleton compiled graph — built once, reused for all requests.
 _compiled_graph = None
@@ -61,6 +59,9 @@ async def get_checkpointer() -> AsyncSqliteSaver:
     """
     global _checkpointer, _checkpointer_cm
     if _checkpointer is None:
+        from pathlib import Path
+
+        Path(CHECKPOINT_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
         _checkpointer_cm = AsyncSqliteSaver.from_conn_string(CHECKPOINT_DB_PATH)
         _checkpointer = await _checkpointer_cm.__aenter__()
     return _checkpointer

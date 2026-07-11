@@ -27,13 +27,14 @@ Example flow:
 from __future__ import annotations
 
 import operator
-from typing import Annotated, Any, Literal, Optional, TypedDict
-
+from datetime import UTC, datetime
+from typing import Annotated, Any, Literal, TypedDict
 
 # === The Interview State ===
 #
 # All interview state lives here — checkpointed to SQLite by LangGraph.
 # No separate session store needed.
+
 
 class InterviewState(TypedDict, total=False):
     """
@@ -49,6 +50,8 @@ class InterviewState(TypedDict, total=False):
     full_resume_text: str  # LLM-parsed resume, passed to all nodes
     mode: Literal["hr", "tech", "mixed"]
     model_type: Literal["api", "custom"]
+    created_at: str
+    updated_at: str
 
     # ─── Config (set once at creation) ───
     num_questions: int
@@ -59,21 +62,21 @@ class InterviewState(TypedDict, total=False):
     #
     # status: tracks where we are in the interview lifecycle
     status: Literal[
-        "pending",      # Session created, not started
-        "generating",   # Generating questions from resume
-        "asking",       # Waiting for candidate's answer
-        "evaluating",   # Evaluating an answer
-        "completed",    # All questions done
-        "cancelled",    # User ended early
+        "pending",  # Session created, not started
+        "generating",  # Generating questions from resume
+        "asking",  # Waiting for candidate's answer
+        "evaluating",  # Evaluating an answer
+        "completed",  # All questions done
+        "cancelled",  # User ended early
     ]
-    questions: list[str]                # Generated interview questions
-    current_question_index: int         # Which question we're on (0-based)
-    current_follow_up_count: int        # How many follow-ups for current question
-    resume_context: str                 # RAG-retrieved context for current question
+    questions: list[str]  # Generated interview questions
+    current_question_index: int  # Which question we're on (0-based)
+    current_follow_up_count: int  # How many follow-ups for current question
+    resume_context: str  # RAG-retrieved context for current question
 
     # ─── Current Interaction (set/cleared each graph invocation) ───
-    current_answer: Optional[str]       # The answer being evaluated right now
-    current_evaluation: Optional[dict]  # Result from GrillingEngine.evaluate_answer()
+    current_answer: str | None  # The answer being evaluated right now
+    current_evaluation: dict | None  # Result from GrillingEngine.evaluate_answer()
 
     # ─── Conversation History (append-only) ───
     #
@@ -90,15 +93,15 @@ class InterviewState(TypedDict, total=False):
     # When model_type="custom", Groq preprocesses the resume into a compact format.
     # This dict contains: resume_summary, questions, question_contexts
     # Stored here so it flows through the graph and gets checkpointed.
-    prepared_context: Optional[dict[str, Any]]
+    prepared_context: dict[str, Any] | None
 
     # ─── Output (read by the route handler after graph returns) ───
     #
     # These fields tell the HTTP/WS handler what to send back to the client.
     # The graph sets these; the route reads them and formats the response.
-    response_type: Optional[Literal["question", "follow_up", "complete", "error"]]
-    response_content: Optional[str]
-    response_data: Optional[dict]
+    response_type: Literal["question", "follow_up", "complete", "error"] | None
+    response_content: str | None
+    response_data: dict | None
 
     # ─── Input Signal (set by route handler BEFORE invoking graph) ───
     #
@@ -109,16 +112,17 @@ class InterviewState(TypedDict, total=False):
     # "answer" → evaluate current_answer, decide follow-up or next question
     # "skip"   → skip current question, move to next
     # "end"    → cancel interview, generate summary
-    action: Optional[Literal["start", "answer", "skip", "end"]]
+    action: Literal["start", "answer", "skip", "end"] | None
 
     # ─── Error ───
-    error: Optional[str]
+    error: str | None
 
 
 # === Helper: Create initial state for a new interview ===
 #
 # This is called when POST /sessions creates a new interview.
 # It sets up the state that will be passed to the first graph invocation.
+
 
 def create_initial_state(
     session_id: str,
@@ -132,6 +136,7 @@ def create_initial_state(
     full_resume_text: str = "",
 ) -> InterviewState:
     """Create the initial state for a new interview session."""
+    now = datetime.now(UTC).isoformat()
     return InterviewState(
         # Identity
         session_id=session_id,
@@ -139,6 +144,8 @@ def create_initial_state(
         full_resume_text=full_resume_text,
         mode=mode,
         model_type=model_type,
+        created_at=now,
+        updated_at=now,
         # Config
         num_questions=num_questions,
         max_follow_ups=max_follow_ups,
@@ -164,3 +171,33 @@ def create_initial_state(
         action=None,
         error=None,
     )
+
+
+def normalize_public_status(status: str | None) -> str:
+    """Map graph execution phases to the stable public lifecycle contract."""
+    if status in {"asking", "evaluating", "generating"}:
+        return "in_progress"
+    if status in {"pending", "completed", "cancelled"}:
+        return status
+    return "pending"
+
+
+def calculate_questions_asked(state: InterviewState) -> int:
+    """Count distinct main questions presented, excluding follow-ups."""
+    presented = sum(
+        1
+        for message in state.get("conversation", [])
+        if message.get("role") == "interviewer"
+        and not message.get("is_follow_up", False)
+    )
+    return min(presented, len(state.get("questions", [])))
+
+
+def calculate_duration_seconds(state: InterviewState) -> float:
+    """Return elapsed session time; legacy checkpoints without timestamps use zero."""
+    try:
+        created = datetime.fromisoformat(state["created_at"])
+        updated = datetime.fromisoformat(state["updated_at"])
+        return max(0.0, (updated - created).total_seconds())
+    except (KeyError, TypeError, ValueError):
+        return 0.0

@@ -5,29 +5,27 @@ Resume upload and management API routes.
 import os
 import shutil
 from pathlib import Path
-from typing import List
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
+from backend.app.api.deps import (
+    ensure_upload_dir,
+    generate_resume_id,
+    get_llm,
+    get_retriever,
+    validate_file_extension,
+)
 from backend.app.config import settings
 from backend.app.models.schemas import (
-    ResumeUploadResponse,
-    ResumeSummary,
+    GeneratedQuestion,
     GenerateQuestionsRequest,
     GenerateQuestionsResponse,
-    GeneratedQuestion,
     QuestionType,
-)
-from backend.app.api.deps import (
-    get_retriever,
-    get_llm,
-    ensure_upload_dir,
-    validate_file_extension,
-    generate_resume_id,
+    ResumeSummary,
+    ResumeUploadResponse,
 )
 from backend.app.services.llm_service import BaseLLMService
 from rag.retriever import InterviewRetriever
-
 
 router = APIRouter(prefix="/resume", tags=["resume"])
 
@@ -39,7 +37,7 @@ async def upload_resume(
 ):
     """
     Upload and process a resume file.
-    
+
     Supports PDF and TXT files. The resume will be:
     1. Saved to disk
     2. Parsed to extract structured information
@@ -52,34 +50,34 @@ async def upload_resume(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No filename provided",
         )
-    
+
     if not validate_file_extension(file.filename):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid file type. Allowed: {settings.ALLOWED_EXTENSIONS}",
         )
-    
+
     # Check file size
     file.file.seek(0, 2)  # Seek to end
     file_size = file.file.tell()
     file.file.seek(0)  # Reset to beginning
-    
+
     if file_size > settings.MAX_UPLOAD_SIZE:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"File too large. Maximum size: {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB",
         )
-    
+
     # Generate resume ID and save file
     resume_id = generate_resume_id(file.filename)
     upload_dir = ensure_upload_dir()
     file_path = upload_dir / f"{resume_id}{Path(file.filename).suffix}"
-    
+
     try:
         # Save uploaded file
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        
+
         # Process resume: extract text → LLM parse → save structured markdown
         await retriever.process_resume(str(file_path), resume_id)
 
@@ -93,15 +91,26 @@ async def upload_resume(
             sections=summary["sections"],
             message="Resume processed successfully",
         )
-        
-    except Exception as e:
+
+    except (ValueError, RuntimeError) as e:
         # Clean up file if processing failed
         if file_path.exists():
             os.remove(file_path)
         raise HTTPException(
+            status_code=(
+                status.HTTP_422_UNPROCESSABLE_ENTITY
+                if isinstance(e, ValueError)
+                else status.HTTP_502_BAD_GATEWAY
+            ),
+            detail=str(e),
+        ) from e
+    except Exception as e:
+        if file_path.exists():
+            os.remove(file_path)
+        raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process resume: {str(e)}",
-        )
+            detail="Failed to process resume",
+        ) from e
 
 
 @router.get("/{resume_id}", response_model=ResumeSummary)
@@ -147,11 +156,12 @@ async def delete_resume(
     try:
         # Delete parsed resume file
         parsed_path = Path(settings.PARSED_RESUME_DIR) / f"{resume_id}.md"
-        if parsed_path.exists():
+        had_parsed_resume = parsed_path.exists()
+        if had_parsed_resume:
             os.remove(parsed_path)
 
         # Delete from vector database (old resumes)
-        if retriever.embedder:
+        if not had_parsed_resume and retriever.embedder:
             try:
                 retriever.embedder._delete_resume(resume_id)
             except Exception:
@@ -166,7 +176,7 @@ async def delete_resume(
                 break
 
         return {"message": f"Resume {resume_id} deleted successfully"}
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -174,7 +184,9 @@ async def delete_resume(
         )
 
 
-@router.post("/{resume_id}/generate-questions", response_model=GenerateQuestionsResponse)
+@router.post(
+    "/{resume_id}/generate-questions", response_model=GenerateQuestionsResponse
+)
 async def generate_questions(
     resume_id: str,
     request: GenerateQuestionsRequest,
@@ -183,7 +195,7 @@ async def generate_questions(
 ):
     """
     Generate interview questions for a resume.
-    
+
     Uses RAG to retrieve relevant resume context and LLM to generate questions.
     """
     # Verify resume exists
@@ -193,7 +205,7 @@ async def generate_questions(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Resume not found: {resume_id}",
         )
-    
+
     try:
         # Build prompt using retriever
         prompt = retriever.build_prompt(
@@ -202,10 +214,10 @@ async def generate_questions(
             question_type=request.question_type.value,
             n_questions=request.num_questions,
         )
-        
+
         # System prompt for question generation
-        system_prompt = """You are an expert technical interviewer. Generate specific, 
-relevant interview questions based on the candidate's resume. 
+        system_prompt = """You are an expert technical interviewer. Generate specific,
+relevant interview questions based on the candidate's resume.
 
 Rules:
 1. Questions should be directly related to the resume content
@@ -219,7 +231,7 @@ Format your response as:
 2. [Question 2]
 ...
 """
-        
+
         # Generate questions using LLM
         response = await llm.generate(
             prompt=prompt,
@@ -227,15 +239,15 @@ Format your response as:
             max_tokens=1024,
             temperature=0.7,
         )
-        
+
         # Parse questions from response
         questions = parse_questions_from_response(response, request.question_type)
-        
+
         return GenerateQuestionsResponse(
             resume_id=resume_id,
             questions=questions,
         )
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -246,28 +258,31 @@ Format your response as:
 def parse_questions_from_response(
     response: str,
     question_type: QuestionType,
-) -> List[GeneratedQuestion]:
+) -> list[GeneratedQuestion]:
     """Parse LLM response into structured questions."""
     questions = []
     lines = response.strip().split("\n")
-    
+
     for line in lines:
         line = line.strip()
         if not line:
             continue
-        
+
         # Remove numbering (1., 2., -, *, etc.)
         import re
-        cleaned = re.sub(r'^[\d]+[.)\-]\s*', '', line)
-        cleaned = re.sub(r'^[-*]\s*', '', cleaned)
+
+        cleaned = re.sub(r"^[\d]+[.)\-]\s*", "", line)
+        cleaned = re.sub(r"^[-*]\s*", "", cleaned)
         cleaned = cleaned.strip()
-        
+
         if cleaned and len(cleaned) > 10:  # Minimum question length
-            questions.append(GeneratedQuestion(
-                question=cleaned,
-                type=question_type,
-            ))
-    
+            questions.append(
+                GeneratedQuestion(
+                    question=cleaned,
+                    type=question_type,
+                )
+            )
+
     return questions
 
 
@@ -288,15 +303,15 @@ async def get_resume_chunks(
             )
         else:
             chunks = retriever.embedder.get_all_chunks(resume_id)
-        
+
         if not chunks:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No chunks found for resume: {resume_id}",
             )
-        
+
         return {"resume_id": resume_id, "chunks": chunks}
-        
+
     except HTTPException:
         raise
     except Exception as e:

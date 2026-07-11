@@ -3,11 +3,10 @@ Speech-to-Text (STT) Service using Deepgram.
 Converts audio to text for interview responses.
 """
 
-import asyncio
-import httpx
-from typing import Optional
-from dataclasses import dataclass
 import base64
+from dataclasses import dataclass
+
+import httpx
 
 from backend.app.config import settings
 
@@ -15,6 +14,7 @@ from backend.app.config import settings
 @dataclass
 class TranscriptionResult:
     """Result of speech-to-text transcription."""
+
     text: str
     confidence: float
     is_final: bool
@@ -34,17 +34,17 @@ class DeepgramSTTService:
     Speech-to-Text service using Deepgram API.
     Uses direct HTTP API for simplicity and reliability.
     """
-    
+
     BASE_URL = "https://api.deepgram.com/v1/listen"
-    
+
     def __init__(self):
         if not settings.DEEPGRAM_API_KEY:
             raise ValueError("DEEPGRAM_API_KEY not set in environment")
-        
+
         self.api_key = settings.DEEPGRAM_API_KEY
         self.model = settings.DEEPGRAM_MODEL
         self.language = settings.DEEPGRAM_LANGUAGE
-    
+
     async def transcribe_audio(
         self,
         audio_data: bytes,
@@ -52,11 +52,11 @@ class DeepgramSTTService:
     ) -> TranscriptionResult:
         """
         Transcribe pre-recorded audio.
-        
+
         Args:
             audio_data: Raw audio bytes
             mime_type: Audio MIME type (audio/webm, audio/wav, audio/mp3, etc.)
-        
+
         Returns:
             TranscriptionResult with transcribed text
         """
@@ -67,12 +67,12 @@ class DeepgramSTTService:
                 "smart_format": "true",
                 "punctuate": "true",
             }
-            
+
             headers = {
                 "Authorization": f"Token {self.api_key}",
                 "Content-Type": mime_type,
             }
-            
+
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     self.BASE_URL,
@@ -80,18 +80,20 @@ class DeepgramSTTService:
                     headers=headers,
                     content=audio_data,
                 )
-                
+
                 if response.status_code != 200:
-                    print(f"Deepgram API error: {response.status_code} - {response.text}")
+                    print(
+                        f"Deepgram API error: {response.status_code} - {response.text}"
+                    )
                     return TranscriptionResult(
                         text="",
                         confidence=0.0,
                         is_final=True,
                         duration_seconds=0.0,
                     )
-                
+
                 result = response.json()
-                
+
                 # Extract transcript from response
                 channels = result.get("results", {}).get("channels", [])
                 if channels and channels[0].get("alternatives"):
@@ -101,16 +103,16 @@ class DeepgramSTTService:
                 else:
                     transcript = ""
                     confidence = 0.0
-                
+
                 duration = result.get("metadata", {}).get("duration", 0.0)
-                
+
                 return TranscriptionResult(
                     text=transcript,
                     confidence=confidence,
                     is_final=True,
                     duration_seconds=duration,
                 )
-            
+
         except Exception as e:
             print(f"Deepgram transcription error: {e}")
             return TranscriptionResult(
@@ -119,7 +121,7 @@ class DeepgramSTTService:
                 is_final=True,
                 duration_seconds=0.0,
             )
-    
+
     async def transcribe_base64(
         self,
         audio_base64: str,
@@ -127,11 +129,11 @@ class DeepgramSTTService:
     ) -> TranscriptionResult:
         """
         Transcribe base64-encoded audio.
-        
+
         Args:
             audio_base64: Base64 encoded audio string
             mime_type: Audio MIME type
-        
+
         Returns:
             TranscriptionResult with transcribed text
         """
@@ -141,15 +143,15 @@ class DeepgramSTTService:
 
 class STTServiceFactory:
     """Factory to create STT service based on configuration."""
-    
-    _instance: Optional[DeepgramSTTService] = None
-    
+
+    _instance: DeepgramSTTService | None = None
+
     @classmethod
     def get_service(cls) -> DeepgramSTTService:
         if cls._instance is None:
             cls._instance = cls._create_service()
         return cls._instance
-    
+
     @classmethod
     def _create_service(cls) -> DeepgramSTTService:
         if settings.STT_PROVIDER == "deepgram":
@@ -157,7 +159,7 @@ class STTServiceFactory:
             return DeepgramSTTService()
         else:
             raise ValueError(f"Unknown STT provider: {settings.STT_PROVIDER}")
-    
+
     @classmethod
     def reset(cls):
         cls._instance = None

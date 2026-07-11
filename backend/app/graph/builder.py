@@ -55,10 +55,10 @@ The compiled graph is what you .ainvoke() from route handlers.
    "error" → handle_error → END
 """
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
+from backend.app.graph import edges, nodes
 from backend.app.graph.state import InterviewState
-from backend.app.graph import nodes, edges
 
 
 def build_interview_graph() -> StateGraph:

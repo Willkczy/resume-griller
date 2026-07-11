@@ -33,16 +33,20 @@ from __future__ import annotations
 
 import re
 import time
-from typing import Any
+from datetime import UTC
 
 from langchain_core.runnables import RunnableConfig
 
-from backend.app.graph.state import InterviewState
-from backend.app.graph.services import GraphServices
 from backend.app.core.grilling_engine import GapType
-
+from backend.app.graph.services import GraphServices
+from backend.app.graph.state import (
+    InterviewState,
+    calculate_duration_seconds,
+    calculate_questions_asked,
+)
 
 # === Helper: extract services from config ===
+
 
 def _get_services(config: RunnableConfig) -> GraphServices:
     """
@@ -58,14 +62,16 @@ def _get_services(config: RunnableConfig) -> GraphServices:
 
 # === Helper: build a conversation message dict ===
 
+
 def _msg(role: str, content: str, is_follow_up: bool = False, **metadata) -> dict:
     """Create a message dict for the conversation list."""
     from datetime import datetime
+
     return {
         "role": role,
         "content": content,
         "is_follow_up": is_follow_up,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "metadata": metadata,
     }
 
@@ -77,13 +83,11 @@ def _msg(role: str, content: str, is_follow_up: bool = False, **metadata) -> dic
 # When:   action="start"
 # Does:   RAG prompt + LLM → parse → store questions in state
 
-async def generate_questions(
-    state: InterviewState, config: RunnableConfig
-) -> dict:
+
+async def generate_questions(state: InterviewState, config: RunnableConfig) -> dict:
     """Generate interview questions from resume using RAG + LLM."""
     services = _get_services(config)
 
-    resume_id = state["resume_id"]
     mode = state["mode"]
     model_type = state["model_type"]
     num_questions = state["num_questions"]
@@ -167,9 +171,8 @@ Generate specific, relevant interview questions based on this resume."""
 # When:   After generate_questions, or after advance_question
 # Does:   Formats current question as output, retrieves RAG context
 
-async def ask_question(
-    state: InterviewState, config: RunnableConfig
-) -> dict:
+
+async def ask_question(state: InterviewState, config: RunnableConfig) -> dict:
     """Prepare the current question for the candidate."""
     idx = state["current_question_index"]
     questions = state["questions"]
@@ -214,9 +217,8 @@ async def ask_question(
 # When:   action="answer"
 # Does:   GrillingEngine.evaluate_answer() + optional consistency check
 
-async def evaluate_answer(
-    state: InterviewState, config: RunnableConfig
-) -> dict:
+
+async def evaluate_answer(state: InterviewState, config: RunnableConfig) -> dict:
     """Evaluate the candidate's answer using the GrillingEngine."""
     services = _get_services(config)
 
@@ -256,11 +258,7 @@ async def evaluate_answer(
 
     # Resume consistency check (API mode, first answer to a question only)
     # Catches candidates claiming work that doesn't match their resume
-    if (
-        resume_context
-        and follow_up_count == 0
-        and state["model_type"] != "custom"
-    ):
+    if resume_context and follow_up_count == 0 and state["model_type"] != "custom":
         try:
             is_consistent, inconsistencies = (
                 await services.grilling_engine.check_resume_consistency(
@@ -273,9 +271,9 @@ async def evaluate_answer(
                 evaluation.gap_analysis.detected_gaps.append(
                     GapType.RESUME_INCONSISTENT
                 )
-                evaluation.gap_analysis.gap_details[
-                    GapType.RESUME_INCONSISTENT
-                ] = inconsistencies[0]
+                evaluation.gap_analysis.gap_details[GapType.RESUME_INCONSISTENT] = (
+                    inconsistencies[0]
+                )
                 evaluation.is_sufficient = False
                 evaluation.suggested_follow_up = (
                     f"I'd like to clarify something. {inconsistencies[0]} "
@@ -298,9 +296,8 @@ async def evaluate_answer(
 # When:   route_after_evaluate returns "grill"
 # Does:   Generates a targeted follow-up question based on detected gaps
 
-async def generate_follow_up(
-    state: InterviewState, config: RunnableConfig
-) -> dict:
+
+async def generate_follow_up(state: InterviewState, config: RunnableConfig) -> dict:
     """Generate a follow-up question targeting the priority gap."""
     services = _get_services(config)
 
@@ -311,6 +308,7 @@ async def generate_follow_up(
     # Reconstruct AnswerEvaluation from the dict stored in state
     # GrillingEngine.generate_follow_up needs the evaluation object
     from backend.app.core.grilling_engine import AnswerEvaluation
+
     evaluation = AnswerEvaluation.from_dict(state["current_evaluation"])
 
     # Build conversation history
@@ -377,9 +375,8 @@ async def generate_follow_up(
 # When:   After evaluate (no more grilling) or after skip
 # Does:   Increments question index, resets follow-up count
 
-async def advance_question(
-    state: InterviewState, config: RunnableConfig
-) -> dict:
+
+async def advance_question(state: InterviewState, config: RunnableConfig) -> dict:
     """Move to the next question."""
     return {
         "current_question_index": state["current_question_index"] + 1,
@@ -396,15 +393,15 @@ async def advance_question(
 # When:   All questions done, or user ends early
 # Does:   Generates summary, sets completed status
 
-async def complete_interview(
-    state: InterviewState, config: RunnableConfig
-) -> dict:
+
+async def complete_interview(state: InterviewState, config: RunnableConfig) -> dict:
     """Mark interview as complete and generate summary."""
     conversation = state.get("conversation", [])
 
     # Count answers and follow-ups from conversation
     candidate_msgs = [
-        m for m in conversation
+        m
+        for m in conversation
         if m["role"] == "candidate" and m["content"] != "[Skipped]"
     ]
     follow_ups = [m for m in conversation if m.get("is_follow_up")]
@@ -415,32 +412,36 @@ async def complete_interview(
         for gap in m.get("metadata", {}).get("detected_gaps", []):
             gap_freq[gap] = gap_freq.get(gap, 0) + 1
 
-    questions_asked = state["current_question_index"]
+    questions_asked = calculate_questions_asked(state)
+    is_cancelled = state.get("status") == "cancelled"
 
     summary = {
         "session_id": state["session_id"],
         "resume_id": state["resume_id"],
         "mode": state["mode"],
         "model_type": state["model_type"],
-        "status": "completed",
+        "status": "cancelled" if is_cancelled else "completed",
         "questions_asked": questions_asked,
         "total_questions": len(state["questions"]),
         "answers_given": len(candidate_msgs),
         "follow_ups_asked": len(follow_ups),
-        "conversation_length": len(conversation),
+        "conversation_length": len(conversation) + 1,
         "gap_statistics": gap_freq,
         "grilling_intensity": len(follow_ups) / max(questions_asked, 1),
+        "duration_seconds": calculate_duration_seconds(state),
     }
 
     # Determine completion message based on how we got here
-    is_cancelled = state.get("status") == "cancelled"
     content = (
         "Interview ended. Thank you for your time."
         if is_cancelled
         else "Excellent! That concludes our interview. Thank you for your thoughtful responses."
     )
 
-    sys_msg = _msg("system", "Interview completed." if not is_cancelled else "Interview ended by user.")
+    sys_msg = _msg(
+        "system",
+        "Interview completed." if not is_cancelled else "Interview ended by user.",
+    )
 
     return {
         "status": "cancelled" if is_cancelled else "completed",
@@ -458,9 +459,8 @@ async def complete_interview(
 # When:   action="skip"
 # Does:   Records "[Skipped]" answer, then advance_question runs next
 
-async def handle_skip(
-    state: InterviewState, config: RunnableConfig
-) -> dict:
+
+async def handle_skip(state: InterviewState, config: RunnableConfig) -> dict:
     """Record that the candidate skipped this question."""
     skip_msg = _msg("candidate", "[Skipped]", skipped=True)
     return {
@@ -475,9 +475,8 @@ async def handle_skip(
 # When:   action="end"
 # Does:   Marks cancelled, complete_interview runs next for summary
 
-async def handle_end(
-    state: InterviewState, config: RunnableConfig
-) -> dict:
+
+async def handle_end(state: InterviewState, config: RunnableConfig) -> dict:
     """Mark the interview as cancelled by user."""
     return {
         "status": "cancelled",
@@ -488,9 +487,8 @@ async def handle_end(
 # Node: handle_error
 # ─────────────────────────────────────────────
 
-async def handle_error(
-    state: InterviewState, config: RunnableConfig
-) -> dict:
+
+async def handle_error(state: InterviewState, config: RunnableConfig) -> dict:
     """Capture an error and set error response."""
     error_msg = state.get("error", "An unknown error occurred.")
     return {
@@ -503,6 +501,7 @@ async def handle_error(
 # ═══════════════════════════════════════════════
 # Private helpers (moved from InterviewAgent)
 # ═══════════════════════════════════════════════
+
 
 def _build_question_generation_prompt(mode: str, num_questions: int) -> str:
     """Build the system prompt for question generation based on interview mode."""
@@ -519,7 +518,7 @@ def _build_question_generation_prompt(mode: str, num_questions: int) -> str:
         mode_description = "BEHAVIORAL/HR"
         mode_rules = (
             "STRICT RULES FOR BEHAVIORAL QUESTIONS:\n"
-            'DO ask about: experiences, situations, teamwork, leadership, conflict, challenges\n'
+            "DO ask about: experiences, situations, teamwork, leadership, conflict, challenges\n"
             'DO use: "Tell me about a time...", "Describe a situation...", '
             '"Give me an example..."\n'
             "DO NOT ask: technical implementation details, code, algorithms, architecture"

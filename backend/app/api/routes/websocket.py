@@ -9,25 +9,26 @@ transport-level concerns, not interview logic.
 """
 
 import json
-from datetime import datetime
-from typing import Optional
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from fastapi.websockets import WebSocketState
 
 from backend.app.config import settings
-from backend.app.graph import get_compiled_graph, create_initial_state, GraphServices
+from backend.app.graph import GraphServices, get_compiled_graph
+from backend.app.graph.state import normalize_public_status
 from backend.app.services.stt_service import get_stt_service
 from backend.app.services.tts_service import get_tts_service
-
 
 router = APIRouter(tags=["websocket"])
 
 
 # ============== WebSocket Message Types ==============
 
+
 class WSMessageType:
     """WebSocket message types."""
+
     # Client -> Server
     START = "start"
     ANSWER = "answer"
@@ -79,7 +80,7 @@ def create_ws_message(
     message = {
         "type": msg_type,
         "content": content,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
     if data:
         message["data"] = data
@@ -90,9 +91,10 @@ def create_ws_message(
 
 # ============== Voice Helper ==============
 
-async def generate_voice_response(text: str) -> Optional[str]:
+
+async def generate_voice_response(text: str, voice_enabled: bool = True) -> str | None:
     """Generate TTS audio. Returns Base64 string or None."""
-    if not settings.VOICE_ENABLED or not text or not text.strip():
+    if not voice_enabled or not settings.VOICE_ENABLED or not text or not text.strip():
         return None
     try:
         tts = get_tts_service()
@@ -104,6 +106,7 @@ async def generate_voice_response(text: str) -> Optional[str]:
 
 
 # ============== Graph Invocation Helper ==============
+
 
 async def invoke_graph_for_ws(
     session_id: str,
@@ -126,6 +129,7 @@ async def invoke_graph_for_ws(
         graph_input.update(initial_state)
     if current_answer:
         graph_input["current_answer"] = current_answer
+    graph_input["updated_at"] = datetime.now(UTC).isoformat()
 
     result = await graph.ainvoke(
         graph_input,
@@ -156,6 +160,7 @@ async def invoke_graph_for_ws(
 
 # ============== WebSocket Endpoint ==============
 
+
 @router.websocket("/ws/interview/{session_id}")
 async def interview_websocket(
     websocket: WebSocket,
@@ -185,20 +190,22 @@ async def interview_websocket(
     # Send connected message with current session info
     questions = session_state.get("questions", [])
     idx = session_state.get("current_question_index", 0)
-    await websocket.send_json(create_ws_message(
-        msg_type=WSMessageType.CONNECTED,
-        content="Connected to interview session",
-        data={
-            "session_id": session_id,
-            "resume_id": session_state.get("resume_id", ""),
-            "mode": session_state.get("mode", "mixed"),
-            "model_type": session_state.get("model_type", "api"),
-            "status": session_state.get("status", "pending"),
-            "current_question": questions[idx] if idx < len(questions) else None,
-            "question_number": idx + 1,
-            "total_questions": len(questions),
-        }
-    ))
+    await websocket.send_json(
+        create_ws_message(
+            msg_type=WSMessageType.CONNECTED,
+            content="Connected to interview session",
+            data={
+                "session_id": session_id,
+                "resume_id": session_state.get("resume_id", ""),
+                "mode": session_state.get("mode", "mixed"),
+                "model_type": session_state.get("model_type", "api"),
+                "status": normalize_public_status(session_state.get("status")),
+                "current_question": questions[idx] if idx < len(questions) else None,
+                "question_number": idx + 1,
+                "total_questions": len(questions),
+            },
+        )
+    )
 
     model_type = session_state.get("model_type", "api")
     prepared_context = session_state.get("prepared_context")
@@ -210,29 +217,34 @@ async def interview_websocket(
                 raw_message = await websocket.receive_text()
                 message = json.loads(raw_message)
             except json.JSONDecodeError:
-                await websocket.send_json(create_ws_message(
-                    msg_type=WSMessageType.ERROR,
-                    error="Invalid JSON format"
-                ))
+                await websocket.send_json(
+                    create_ws_message(
+                        msg_type=WSMessageType.ERROR, error="Invalid JSON format"
+                    )
+                )
                 continue
 
             msg_type = message.get("type", "")
             content = message.get("content", "")
+            message_data = message.get("data") or {}
+            voice_enabled = bool(message_data.get("voice_enabled", True))
 
             # --- Ping ---
             if msg_type == WSMessageType.PING:
-                await websocket.send_json(create_ws_message(
-                    msg_type=WSMessageType.PONG, content="pong"
-                ))
+                await websocket.send_json(
+                    create_ws_message(msg_type=WSMessageType.PONG, content="pong")
+                )
                 continue
 
             # --- Audio Input (STT) ---
             if msg_type == WSMessageType.ANSWER_AUDIO:
                 if not settings.VOICE_ENABLED:
-                    await websocket.send_json(create_ws_message(
-                        msg_type=WSMessageType.ERROR,
-                        error="Voice services disabled"
-                    ))
+                    await websocket.send_json(
+                        create_ws_message(
+                            msg_type=WSMessageType.ERROR,
+                            error="Voice services disabled",
+                        )
+                    )
                     continue
 
                 try:
@@ -240,11 +252,13 @@ async def interview_websocket(
                     transcription = await stt.transcribe_base64(content)
                     text_answer = transcription.text
 
-                    await websocket.send_json(create_ws_message(
-                        msg_type=WSMessageType.TRANSCRIPT,
-                        content=text_answer,
-                        data={"confidence": transcription.confidence}
-                    ))
+                    await websocket.send_json(
+                        create_ws_message(
+                            msg_type=WSMessageType.TRANSCRIPT,
+                            content=text_answer,
+                            data={"confidence": transcription.confidence},
+                        )
+                    )
 
                     # Treat as normal text answer
                     msg_type = WSMessageType.ANSWER
@@ -252,10 +266,12 @@ async def interview_websocket(
 
                 except Exception as e:
                     print(f"STT Error: {e}")
-                    await websocket.send_json(create_ws_message(
-                        msg_type=WSMessageType.ERROR,
-                        error=f"Transcription failed: {str(e)}"
-                    ))
+                    await websocket.send_json(
+                        create_ws_message(
+                            msg_type=WSMessageType.ERROR,
+                            error=f"Transcription failed: {str(e)}",
+                        )
+                    )
                     continue
 
             # --- Start ---
@@ -273,7 +289,7 @@ async def interview_websocket(
                             "question_number": qi + 1,
                             "total_questions": len(q),
                             "status": "resumed",
-                        }
+                        },
                     )
                 else:
                     response_msg = await invoke_graph_for_ws(
@@ -286,10 +302,12 @@ async def interview_websocket(
             # --- Answer ---
             elif msg_type == WSMessageType.ANSWER:
                 if not content or not content.strip():
-                    await websocket.send_json(create_ws_message(
-                        msg_type=WSMessageType.ERROR,
-                        error="Answer cannot be empty",
-                    ))
+                    await websocket.send_json(
+                        create_ws_message(
+                            msg_type=WSMessageType.ERROR,
+                            error="Answer cannot be empty",
+                        )
+                    )
                     continue
 
                 response_msg = await invoke_graph_for_ws(
@@ -318,21 +336,27 @@ async def interview_websocket(
                     prepared_context=prepared_context,
                 )
                 # Attach audio and send before breaking
-                audio = await generate_voice_response(response_msg.get("content"))
+                audio = await generate_voice_response(
+                    response_msg.get("content"), voice_enabled
+                )
                 if audio:
                     response_msg["audio_base64"] = audio
                 await websocket.send_json(response_msg)
                 break
 
             else:
-                await websocket.send_json(create_ws_message(
-                    msg_type=WSMessageType.ERROR,
-                    error=f"Unknown message type: {msg_type}"
-                ))
+                await websocket.send_json(
+                    create_ws_message(
+                        msg_type=WSMessageType.ERROR,
+                        error=f"Unknown message type: {msg_type}",
+                    )
+                )
                 continue
 
             # Attach TTS audio and send
-            audio = await generate_voice_response(response_msg.get("content"))
+            audio = await generate_voice_response(
+                response_msg.get("content"), voice_enabled
+            )
             if audio:
                 response_msg["audio_base64"] = audio
             await websocket.send_json(response_msg)
@@ -343,11 +367,12 @@ async def interview_websocket(
     except Exception as e:
         print(f"WebSocket error: {e}")
         import traceback
+
         traceback.print_exc()
         try:
-            await websocket.send_json(create_ws_message(
-                msg_type=WSMessageType.ERROR, error=str(e)
-            ))
+            await websocket.send_json(
+                create_ws_message(msg_type=WSMessageType.ERROR, error=str(e))
+            )
         except Exception:
             pass
 
