@@ -24,6 +24,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 # ─── Setup ───
 
+
 def create_mock_services():
     """
     Create mock services that simulate LLM and RAG without real API calls.
@@ -31,26 +32,24 @@ def create_mock_services():
     This is useful for testing graph topology and state flow.
     Real integration tests would use actual services.
     """
-    from backend.app.graph.services import GraphServices
     from backend.app.core.grilling_engine import (
-        GrillingEngine, AnswerEvaluation, DetailedScores, GapAnalysis, GapType
+        AnswerEvaluation,
+        DetailedScores,
+        GapAnalysis,
+        GapType,
+        GrillingEngine,
     )
+    from backend.app.graph.services import GraphServices
 
     # Mock LLM — returns canned responses
     mock_llm = AsyncMock()
-    mock_llm.generate = AsyncMock(return_value=(
-        "1. Tell me about the architecture of your main project?\n"
-        "2. What debugging tools did you use for production issues?\n"
-        "3. How did you optimize the database queries?\n"
-    ))
-
-    # Mock retriever — returns fake resume chunks
-    mock_retriever = MagicMock()
-    mock_retriever.build_prompt = MagicMock(return_value="Resume context: Senior SWE at Acme Corp...")
-    mock_retriever.retrieve = MagicMock(return_value=[
-        {"content": "Senior Software Engineer at Acme Corp, 2020-2023"},
-        {"content": "Built microservices architecture serving 1M users"},
-    ])
+    mock_llm.generate = AsyncMock(
+        return_value=(
+            "1. Tell me about the architecture of your main project?\n"
+            "2. What debugging tools did you use for production issues?\n"
+            "3. How did you optimize the database queries?\n"
+        )
+    )
 
     # Mock grilling engine — returns a realistic evaluation
     mock_grilling = AsyncMock(spec=GrillingEngine)
@@ -60,8 +59,13 @@ def create_mock_services():
         is_sufficient=False,
         score=0.65,
         detailed_scores=DetailedScores(
-            relevancy=0.8, clarity=0.7, informativeness=0.6,
-            specificity=0.5, quantification=0.3, depth=0.6, completeness=0.5,
+            relevancy=0.8,
+            clarity=0.7,
+            informativeness=0.6,
+            specificity=0.5,
+            quantification=0.3,
+            depth=0.6,
+            completeness=0.5,
         ),
         gap_analysis=GapAnalysis(
             detected_gaps=[GapType.NO_METRICS, GapType.UNCLEAR_PERSONAL_ROLE],
@@ -86,7 +90,6 @@ def create_mock_services():
     mock_grilling.check_resume_consistency = AsyncMock(return_value=(True, []))
 
     return GraphServices(
-        retriever=mock_retriever,
         llm=mock_llm,
         grilling_engine=mock_grilling,
     )
@@ -100,8 +103,12 @@ def print_state(state: dict, label: str = ""):
         print(f"{'='*60}")
 
     fields_to_show = [
-        "status", "action", "current_question_index", "current_follow_up_count",
-        "response_type", "response_content",
+        "status",
+        "action",
+        "current_question_index",
+        "current_follow_up_count",
+        "response_type",
+        "response_content",
     ]
     for key in fields_to_show:
         if key in state and state[key] is not None:
@@ -128,6 +135,7 @@ def print_state(state: dict, label: str = ""):
 
 # ─── Main Test ───
 
+
 async def main():
     """
     Walk through a complete interview flow step by step.
@@ -140,12 +148,13 @@ async def main():
     5. "end" action    → ends interview early
     """
     from langgraph.checkpoint.memory import MemorySaver
+
     from backend.app.graph.builder import build_interview_graph
     from backend.app.graph.state import create_initial_state
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("  INTERVIEW GRAPH — INTERACTIVE TEST")
-    print("="*60)
+    print("=" * 60)
 
     # Build graph with in-memory checkpointer (no SQLite needed for tests)
     graph = build_interview_graph().compile(checkpointer=MemorySaver())
@@ -171,6 +180,7 @@ async def main():
         model_type="api",
         num_questions=3,
         max_follow_ups=2,
+        full_resume_text="Senior SWE at Acme Corp; built services for 1M users.",
     )
 
     # ─── Step 1: Start Interview ───
@@ -204,17 +214,28 @@ async def main():
     # Note: route_after_evaluate reads current_evaluation from state directly
     # (it doesn't call should_grill), so we need to change evaluate_answer's return.
     from backend.app.core.grilling_engine import (
-        AnswerEvaluation, DetailedScores, GapAnalysis,
+        AnswerEvaluation,
+        DetailedScores,
+        GapAnalysis,
     )
+
     sufficient_eval = AnswerEvaluation(
         is_sufficient=True,
         score=0.90,
         detailed_scores=DetailedScores(
-            relevancy=0.9, clarity=0.9, informativeness=0.9,
-            specificity=0.9, quantification=0.8, depth=0.9, completeness=0.85,
+            relevancy=0.9,
+            clarity=0.9,
+            informativeness=0.9,
+            specificity=0.9,
+            quantification=0.8,
+            depth=0.9,
+            completeness=0.85,
         ),
         gap_analysis=GapAnalysis(
-            detected_gaps=[], gap_details={}, severity=0.1, priority_gap=None,
+            detected_gaps=[],
+            gap_details={},
+            severity=0.1,
+            priority_gap=None,
         ),
         missing_elements=[],
         strengths=["excellent specifics", "quantified results"],
@@ -258,9 +279,9 @@ async def main():
         print("─── Interview Summary ───")
         print(json.dumps(summary, indent=2))
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("  TEST COMPLETE")
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")
 
 
 if __name__ == "__main__":

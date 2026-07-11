@@ -1,9 +1,11 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from rag.resume_parser import ResumeParser
 import json
+
+from rag.resume_parser import ResumeParser
 
 
 def test_pdf():
@@ -25,10 +27,10 @@ def test_pdf():
 
         result = parser.parse(str(pdf_file))
 
-        print(f"\n📋 RAW TEXT (first 500 chars):")
+        print("\n📋 RAW TEXT (first 500 chars):")
         print(result.raw_text[:500])
 
-        print(f"\n👤 CONTACT:")
+        print("\n👤 CONTACT:")
         print(json.dumps(result.contact, indent=2))
 
         print(f"\n🛠️ SKILLS ({len(result.skills)}):")
