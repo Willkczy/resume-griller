@@ -16,7 +16,6 @@ import {
   WifiOff,
   Video,
   VideoOff,
-  Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -172,8 +171,8 @@ export function VideoInterviewRoom({ sessionId }: VideoInterviewRoomProps) {
         case 'follow_up':
           setStatus('in_progress');
           setCurrentQuestion(message.content || '');
-          setQuestionNumber(message.data?.question_number || questionNumber);
-          setTotalQuestions(message.data?.total_questions || totalQuestions);
+          setQuestionNumber(message.data?.question_number ?? 1);
+          setTotalQuestions(message.data?.total_questions ?? 1);
           setPhase('question');
           setTranscript('');
 
@@ -420,7 +419,7 @@ export function VideoInterviewRoom({ sessionId }: VideoInterviewRoomProps) {
               <p className="text-gray-400">Processing your answer...</p>
               {transcript && (
                 <p className="text-sm text-gray-500 mt-2">
-                  Heard: "{transcript}"
+                  Heard: &quot;{transcript}&quot;
                 </p>
               )}
             </div>
@@ -433,7 +432,7 @@ export function VideoInterviewRoom({ sessionId }: VideoInterviewRoomProps) {
               {transcript && (
                 <div className="mt-4 pt-4 border-t border-gray-700">
                   <p className="text-sm text-gray-400 text-center">
-                    🎤 You said: "{transcript}"
+                    🎤 You said: &quot;{transcript}&quot;
                   </p>
                 </div>
               )}

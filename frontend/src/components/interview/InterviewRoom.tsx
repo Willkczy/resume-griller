@@ -95,6 +95,7 @@ export function InterviewRoom({ sessionId }: InterviewRoomProps) {
 
           // Handle existing session state
           if (message.data?.status === 'in_progress' && message.data?.current_question) {
+            const currentQuestion = message.data.current_question;
             // Session already has a question, show it
             setStatus('in_progress');
             setQuestionNumber(message.data.question_number || 1);
@@ -103,7 +104,7 @@ export function InterviewRoom({ sessionId }: InterviewRoomProps) {
             // Add the current question to messages
             setMessages((prev) => {
               // Avoid duplicates
-              if (prev.some((m) => m.content === message.data?.current_question)) {
+              if (prev.some((m) => m.content === currentQuestion)) {
                 return prev;
               }
               return [
@@ -111,7 +112,7 @@ export function InterviewRoom({ sessionId }: InterviewRoomProps) {
                 {
                   id: `msg-${Date.now()}`,
                   role: 'interviewer' as const,
-                  content: message.data!.current_question,
+                  content: currentQuestion,
                   timestamp: new Date(),
                   isFollowUp: false,
                 },
@@ -131,8 +132,8 @@ export function InterviewRoom({ sessionId }: InterviewRoomProps) {
         case 'follow_up':
           console.log('[InterviewRoom] Received question/follow_up');
           setStatus('in_progress');
-          setQuestionNumber(message.data?.question_number || questionNumber);
-          setTotalQuestions(message.data?.total_questions || totalQuestions);
+          setQuestionNumber(message.data?.question_number ?? 1);
+          setTotalQuestions(message.data?.total_questions ?? 1);
 
           addMessage({
             role: 'interviewer',

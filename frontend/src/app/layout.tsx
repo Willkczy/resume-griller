@@ -1,11 +1,8 @@
 // frontend/src/app/layout.tsx
 
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
 import { Header } from '@/components/layout/Header';
-
-const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Resume Griller - AI Mock Interview',
@@ -19,7 +16,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body>
         <div className="min-h-screen bg-gray-50">
           <Header />
           <main>{children}</main>
