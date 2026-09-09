@@ -130,25 +130,30 @@ class InterviewerResponse(BaseModel):
     feedback: str | None = None  # Optional feedback on previous answer
 
 
-# ============== WebSocket Schemas ==============
+# ============== Legacy, Unwired WebSocket Schemas ==============
+#
+# The active WebSocket route currently validates its content/data/error mapping in
+# backend/app/api/routes/websocket.py and does not instantiate these models. Keep
+# these definitions out of public contract documentation until they are either
+# removed or deliberately wired to the runtime route.
 
 
 class WSMessage(BaseModel):
-    """WebSocket message format."""
+    """Legacy WebSocket envelope; not the active route contract."""
 
     type: str  # "answer", "control", "status"
     payload: dict[str, Any]
 
 
 class WSAnswerPayload(BaseModel):
-    """Payload for candidate answer via WebSocket."""
+    """Legacy answer payload; not instantiated by the active route."""
 
     text: str
     audio_base64: str | None = None
 
 
 class WSControlPayload(BaseModel):
-    """Payload for control messages."""
+    """Legacy control payload; pause/resume are not active message types."""
 
     action: str  # "start", "pause", "resume", "end", "skip"
 

@@ -72,7 +72,7 @@ class InterviewState(TypedDict, total=False):
     questions: list[str]  # Generated interview questions
     current_question_index: int  # Which question we're on (0-based)
     current_follow_up_count: int  # How many follow-ups for current question
-    resume_context: str  # RAG-retrieved context for current question
+    resume_context: str  # Full parsed resume copied for the current question cycle
 
     # ─── Current Interaction (set/cleared each graph invocation) ───
     current_answer: str | None  # The answer being evaluated right now

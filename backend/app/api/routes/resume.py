@@ -38,11 +38,9 @@ async def upload_resume(
     """
     Upload and process a resume file.
 
-    Supports PDF and TXT files. The resume will be:
-    1. Saved to disk
-    2. Parsed to extract structured information
-    3. Chunked into semantic sections
-    4. Embedded in vector database for retrieval
+    Supports PDF and UTF-8 TXT files. The raw upload is saved to disk, text is
+    extracted, and Groq converts it to structured Markdown. New uploads are not
+    chunked or embedded; ChromaDB remains a compatibility path for legacy IDs.
     """
     # Validate file
     if not file.filename:
@@ -196,7 +194,9 @@ async def generate_questions(
     """
     Generate interview questions for a resume.
 
-    Uses RAG to retrieve relevant resume context and LLM to generate questions.
+    Legacy standalone endpoint. It builds a prompt through InterviewRetriever and
+    asks the selected LLM to generate questions. Normal interview creation uses the
+    LangGraph question-generation node with the complete parsed resume instead.
     """
     # Verify resume exists
     summary = retriever.get_resume_summary(resume_id)

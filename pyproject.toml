@@ -4,13 +4,9 @@ version = "1.0.0"
 description = "AI-powered interview simulator that grills candidates with resume-specific questions"
 readme = "README.md"
 requires-python = ">=3.11"
-license = "MIT"
-authors = [
-    { name = "Your Name", email = "your.email@example.com" }
-]
 
 dependencies = [
-    # RAG Pipeline
+    # Resume parsing and legacy vector-store compatibility
     "torch>=2.0.0",
     "pdfplumber>=0.10.0",
     "PyMuPDF>=1.23.0",
@@ -44,7 +40,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# ML/LoRA dependencies (for local model inference)
+# Experimental ML/LoRA dependencies. No active local loader or training pipeline.
 ml = [
     "transformers>=4.36.0",
     "peft>=0.7.0",
