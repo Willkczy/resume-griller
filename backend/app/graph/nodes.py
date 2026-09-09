@@ -10,7 +10,7 @@ Rules:
 1. Receives the FULL current state + config (which has our services)
 2. Returns a PARTIAL dict of state fields to update
 3. Should be focused — do ONE thing (evaluate, generate, advance, etc.)
-4. Delegates heavy lifting to existing services (GrillingEngine, LLM, RAG)
+4. Delegates heavy lifting to existing services (GrillingEngine and LLM)
    Nodes are thin wrappers, not reimplementations.
 
 The `config` parameter gives access to injected services:
@@ -18,8 +18,8 @@ The `config` parameter gives access to injected services:
 
 Each node in this file maps to a step in the interview flow:
 
-  generate_questions  → Uses RAG + LLM to create interview questions from resume
-  ask_question        → Formats current question as output, retrieves RAG context
+  generate_questions  → Uses the complete parsed resume + LLM to create questions
+  ask_question        → Formats the current question and copies resume context
   evaluate_answer     → Runs GrillingEngine.evaluate_answer() + consistency check
   generate_follow_up  → Runs GrillingEngine.generate_follow_up()
   advance_question    → Moves to next question, resets follow-up counter
@@ -81,11 +81,11 @@ def _msg(role: str, content: str, is_follow_up: bool = False, **metadata) -> dic
 # ─────────────────────────────────────────────
 # Source: InterviewAgent._generate_questions() + _parse_questions()
 # When:   action="start"
-# Does:   RAG prompt + LLM → parse → store questions in state
+# Does:   Full-resume prompt + LLM → parse → store questions in state
 
 
 async def generate_questions(state: InterviewState, config: RunnableConfig) -> dict:
-    """Generate interview questions from resume using RAG + LLM."""
+    """Generate interview questions from the complete parsed resume using an LLM."""
     services = _get_services(config)
 
     mode = state["mode"]
@@ -169,7 +169,7 @@ Generate specific, relevant interview questions based on this resume."""
 # ─────────────────────────────────────────────
 # Source: session message-adding logic
 # When:   After generate_questions, or after advance_question
-# Does:   Formats current question as output, retrieves RAG context
+# Does:   Formats current question and copies full resume context from state
 
 
 async def ask_question(state: InterviewState, config: RunnableConfig) -> dict:
