@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     LOCAL_MODEL_DEVICE: str | None = None  # auto-detect if None
 
     # ============== Voice Services (NEW) ==============
-    VOICE_ENABLED: bool = True
+    VOICE_ENABLED: bool = False
 
     # STT (Speech-to-Text) - Deepgram
     STT_PROVIDER: Literal["deepgram"] = "deepgram"

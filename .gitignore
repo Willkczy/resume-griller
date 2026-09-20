@@ -44,9 +44,9 @@ wandb/
 # --- Database and data ---
 *.db
 *.sqlite3
-data/uploads/
-data/chromadb/
-data/parsed_resumes/*.md
+**/data/uploads/
+**/data/chromadb/
+**/data/parsed_resumes/
 
 # --- IDE Settings ---
 .idea/

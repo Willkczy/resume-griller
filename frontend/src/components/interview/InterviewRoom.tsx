@@ -11,6 +11,7 @@ import { Progress } from '@/components/ui/progress';
 import { ChatMessage } from './ChatMessage';
 import { VoiceRecorder } from './VoiceRecorder';
 import { InterviewWebSocket } from '@/lib/websocket';
+import { getVoiceStatus } from '@/lib/api';
 import type { WSMessage } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -32,6 +33,21 @@ type SessionStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
 export function InterviewRoom({ sessionId }: InterviewRoomProps) {
   const router = useRouter();
   const [inputValue, setInputValue] = useState('');
+  const [canRecord, setCanRecord] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    getVoiceStatus()
+      .then((voice) => {
+        if (active) setCanRecord(voice.enabled && voice.stt_available);
+      })
+      .catch(() => {
+        if (active) setCanRecord(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<SessionStatus>('pending');
   const [questionNumber, setQuestionNumber] = useState(0);
@@ -384,14 +400,18 @@ export function InterviewRoom({ sessionId }: InterviewRoomProps) {
               <Send className="w-4 h-4" />
             </Button>
 
-            <VoiceRecorder
-              onRecordingComplete={handleSendAudio}
-              disabled={isLoading || !isConnected || isSpeaking}
-            />
+            {canRecord && (
+              <VoiceRecorder
+                onRecordingComplete={handleSendAudio}
+                disabled={isLoading || !isConnected || isSpeaking}
+              />
+            )}
           </div>
 
           <p className="text-xs text-gray-500 mt-2 text-center">
-            Type your answer or hold the microphone button to speak
+            {canRecord
+              ? "Type your answer or use the microphone button to speak"
+              : "Type your answer to continue"}
           </p>
         </div>
       )}
