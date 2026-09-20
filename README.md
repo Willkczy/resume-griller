@@ -22,11 +22,16 @@ deployment, and validated model-quality claims are not included yet. The current
 implementation is suitable for local development, not for processing real user
 resumes or operating a public beta.
 
-The assessment found a session-start action merge defect and invalid-evaluation
-handling that the existing tests miss. The intended flow below is not a claim of
-end-to-end correctness. See [the dated assessment](docs/PROJECT_REASSESSMENT.md),
-[the refactor roadmap](DEVELOPMENT_ROADMAP.md), and
-[the current handoff](docs/REFACTOR_HANDOFF.md) for evidence and next work.
+Session creation and repeated follow-up targeting now have real-graph integration
+coverage with mocked models. REST and WebSocket commands share validation against the
+latest LangGraph checkpoint. The active turn stores its exact prompt, question ID and
+parent main-question ID; reads and reconnects return that turn. A single pure policy
+chooses follow-up versus advance. See the [command/turn decision](docs/decisions/0002-interview-commands-and-turns.md).
+
+Model-output validation, durable evaluation history and retry/concurrency guarantees
+remain unfinished. Passing deterministic tests does not establish model quality. See
+[the roadmap](DEVELOPMENT_ROADMAP.md) and [current handoff](docs/REFACTOR_HANDOFF.md)
+for acceptance evidence and next work.
 
 ## Documentation map
 
@@ -165,12 +170,13 @@ proof that startup, scoring, recovery, or live providers work correctly.
 WebSocket endpoint: `/ws/interview/{session_id}`. Client message types are
 `start`, `answer`, `answer_audio`, `skip`, `end`, and `ping`.
 
-Voice routes use the `/api/v1/voice` prefix. The current audio path processes a
-completed recording rather than streaming audio. Voice is not part of the verified
-baseline because the root dependency set does not currently include the ElevenLabs
-SDK. The safe `.env.example` disables voice, while the Python setting still defaults
-to enabled when no environment value is provided; M0 resolves that code/dependency
-contract.
+Voice routes use the `/api/v1/voice` prefix. Text is the default UI and backend
+voice is disabled by default, matching `.env.example`. Disabled endpoints return
+503 without initializing voice providers. Chat recording requires reported STT
+availability; video links fall back to text unless STT and TTS are available.
+The retained voice adapters are experimental batch processing, not verified live
+voice support. ElevenLabs is not in the root dependency set. See the
+[voice decision](docs/decisions/0001-text-only-baseline.md) for limits.
 
 ## Data and compatibility
 
@@ -181,10 +187,12 @@ Runtime data is ignored by Git:
 - `data/chromadb/`
 - `data/interview_checkpoints.db`
 
-Only synthetic, explicitly documented fixtures may be committed. Currently tracked
-PDF/TXT resume samples and the LoRA notebook still require an explicit provenance and
-PII determination under roadmap milestone M0. Two PDFs are byte-identical. Do not use
-any of these artifacts as real-user examples until that gate is resolved.
+Only synthetic, explicitly documented fixtures may be committed. The owner requested
+removal of the old PDF/TXT samples, notebook and derived prompt export. Their origin
+remains unknown. Local and remote branch histories are sanitized, but five GitHub
+pull-request refs still retain historical copies pending host cleanup. See
+[the data inventory](docs/DATA_INVENTORY.md). Parser tests now create a temporary
+synthetic PDF instead of reading those samples.
 
 Do not delete ChromaDB while legacy resume IDs are still needed. New resumes do
 not create embeddings; the legacy embedder is initialized lazily only for an old

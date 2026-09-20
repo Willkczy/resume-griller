@@ -181,6 +181,15 @@ if real data is confirmed, prepare a separately scoped remediation and coordinat
 - Clean setup and relevant checks are recorded with actual results, including failures.
 - Owner can trace a request and describe where sensitive copies persist.
 
+### M0 dependency exception recorded 2026-09-20
+
+The owner accepted the verified local synthetic-data baseline and explicitly deferred
+GitHub PR-reference cleanup to proceed with M1. This host-retention issue does not
+change graph execution. It remains a distribution/release prerequisite, not completed
+remediation; do not send the Support request while deferred. This exception permits
+M1 implementation without asserting provenance or weakening M9's real-user gate.
+Current evidence and owner learning status remain in the handoff.
+
 ### M1 — Correct one complete text interview
 
 **Change / why:** Fix start-action merging/null error handling; model actual turns,

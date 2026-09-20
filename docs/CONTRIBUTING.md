@@ -49,9 +49,9 @@ npm run dev
 The frontend is available at `http://localhost:3000`, and generated backend API
 documentation is at `http://localhost:8000/docs`.
 
-Voice is not part of the verified local baseline. Current settings enable it by
-default while the root dependency set lacks the ElevenLabs SDK. Resolve roadmap M0's
-voice decision before treating TTS as supported.
+The supported baseline is text-only: settings and `.env.example` disable voice.
+Disabled voice paths require no credentials or ElevenLabs SDK. Live voice is still
+experimental; see [the decision](decisions/0001-text-only-baseline.md).
 
 ## Branch and commit conventions
 
@@ -67,6 +67,9 @@ type(scope): short description
 
 Common types are `feat`, `fix`, `docs`, `refactor`, `test`, and `chore`. Common scopes
 are `backend`, `frontend`, `graph`, `rag`, and `ml`.
+
+For the completed M0–M1 sequence, see the [commit reading guide](M0_M1_COMMIT_GUIDE.md)
+for code paths, verification evidence and read-only history inspection commands.
 
 Keep commits focused. A change to AI behavior should include its contract tests,
 evaluation case or rationale, evaluation delta, and documentation in the same pull

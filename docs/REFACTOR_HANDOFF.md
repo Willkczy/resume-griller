@@ -1,6 +1,6 @@
 # Refactor handoff
 
-Last updated: 2026-09-10.
+Last updated: 2026-09-20.
 
 ## Start here
 
@@ -12,20 +12,27 @@ same worktree. The roadmap's M0–M9 numbering supersedes the previous M0–M8 p
 
 ## Current state
 
-The owner approved documenting the learning-oriented plan and pushing the reviewed
-working tree for use on another machine. This is not authorization to implement all
-milestones, select optional tracks, deploy publicly, or rewrite history.
+The owner explicitly delegated implementation, testing and documentation for the
+current milestone. A separate learning agent guides optional exercises; pending
+learning is not an engineering blocker. Do not automatically start the next milestone.
+The owner authorized isolated rewriting, then the five remote branch updates and
+local adoption on 2026-09-20. Those actions are complete. The owner subsequently authorized local implementation
+commits; see the commit record below. No further push, deployment or external
+support message is authorized.
 
-Planning/documentation is complete. No functional refactor fixes have been implemented
-by this planning change. Earlier pending edits align documentation, code comments and
-example configuration with the implemented runtime; they must not be interpreted as
-completion of M0 or repair of the startup/scoring defects.
+M0's local synthetic-data baseline, clean setup, and local/remote-branch history
+sanitation are verified. Five GitHub PR refs still retain historical artifacts.
+On 2026-09-20 the owner explicitly deferred that host-cleanup work and authorized
+M1. This is a scoped dependency exception for local synthetic-data implementation,
+not a claim of full historical erasure or permission for broader distribution.
+Do not send the prepared Support request while it is deferred. Public beta and
+real-user processing remain blocked by M9; resolve retained PR data before release.
 
 | Milestone | Engineering status | Owner learning status | Evidence / blocker |
 |---|---|---|---|
-| M0 | Open; documentation aligned | Not recorded | Provenance/data inventory and voice contract unresolved |
-| M1 | Not started | Not recorded | Depends on M0 |
-| M2 | Not started | Not recorded | Depends on M1 |
+| M0 | Local baseline accepted for M1; host cleanup deferred by owner | Pending / not assessed | Five GitHub PR refs still retain data; release/distribution issue remains open |
+| M1 | Engineering complete; committed locally | Pending / not assessed | 73 tests pass; real graph/engine integration, lifecycle parity and active-turn evidence below |
+| M2 | Technically eligible; not authorized or started | Pending / not assessed | Next: validated model outputs and deterministic CI |
 | M3 | Not started | Not recorded | No human-reviewed benchmark yet |
 | M4 | Not started | Not recorded | No evaluation ledger/report yet |
 | M5 | Not started | Not recorded | Retry/restart guarantees not established |
@@ -34,38 +41,31 @@ completion of M0 or repair of the startup/scoring defects.
 | M8 | Not selected | Not recorded | Optional; depends on M7 |
 | M9 | Not started | Not recorded | Real-user/public-beta gate remains closed |
 
-## Exact next slice: M0 inventory and provenance
+## Current scope: M1 complete; stop at milestone boundary
 
-1. Inspect the tracked PDF/TXT fixtures, `LLM_Inference.ipynb`, nested upload paths,
-   `.gitignore`, and relevant history without printing contact details or secrets.
-2. Create `docs/DATA_INVENTORY.md` documenting categories, storage locations, copies,
-   processors, retention/deletion gaps and provenance status. This file does not exist
-   yet; create it as implementation evidence, not as a speculative completed checklist.
-3. Ask the owner for fixture origin/synthetic status only where repository evidence
-   cannot establish it. Mark unresolved artifacts unknown. Prepare separately scoped
-   remediation if real PII is confirmed; no force push/history rewrite or runtime deletion.
-4. Have the owner draw upload/answer flows and explain one synthetic checkpoint.
-   Agent can provide a walkthrough and review, but must not claim that exercise happened.
-5. Next bounded M0 slice: choose and test a text-only default or properly optional voice
-   dependency contract. Inspect config, `.env.example`, TTS/STT initialization and UI
-   capability reporting. Do not implement streaming voice.
+Startup, active-turn scoring/reconnect, one pure follow-up policy and shared command
+validation are implemented and verified. See the final M1 entries and
+[command/turn decision](decisions/0002-interview-commands-and-turns.md).
 
-Until provenance is established, use newly authored synthetic fixtures for tests and do
-not send tracked resume content to external model services. Continue independent read-only
-inventory while waiting on provenance; do not guess an answer to unblock a gate.
+Exact next action: report M1 acceptance to the owner. Once M2 is explicitly authorized,
+start with failing tests for malformed/missing/out-of-range model evaluations, then
+introduce validated output contracts without silently treating parse failure as success.
+M2 has not started. Pending owner learning does not block technical eligibility.
 
-## Known defects to reproduce after M0
+Deferred M0 item: GitHub PR refs 1–5 and the draft Support request remain documented
+in HISTORY_REMEDIATION and GITHUB_HISTORY_CLEANUP_REQUEST. The owner chose to defer
+that work; do not treat it as an implementation dependency for M1 or as resolved.
 
-- Startup: session `_invoke_graph` overwrites start with initial null action; null error
-  content then fails response validation. Use real graph + mocked model services.
-- Follow-ups: evaluator/current-question APIs use main-question index, not actual turn.
-- Standard evaluation parser accepts empty objects and unbounded scores.
-- Routing policies disagree; evaluation history is cleared on advance.
-- WS lacks REST-equivalent lifecycle checks; reconnect/double submission are not safe.
-- Result counts and custom-mode derived scores cannot support quality claims.
+## Remaining engineering limitations
 
-See the assessment and milestone acceptance checks for details. Do not fix these as
-unrelated cleanup during the documentation/provenance slice.
+- Standard evaluation parsing accepts missing/unbounded output; custom scores are
+  scalar-derived. Structured validation/failure handling belongs to M2.
+- Evaluation history is cleared on advance; reports remain count-based (M4).
+- Sequential validation is not atomic concurrency control or idempotency (M5).
+- Partial-node failures, full history/draft restoration and process-restart recovery
+  are not guaranteed. Missing legacy follow-up prompts reject commands with 409.
+- Model-quality calibration and human-reviewed benchmark evidence do not yet exist (M3).
+- M0 GitHub PR-reference cleanup is deferred; public beta/real-user processing stays blocked.
 
 ## Verification evidence
 
@@ -114,11 +114,10 @@ provider key; live new-upload parsing needs the configured Groq credential.
 
 Suggested prompt for the next agent:
 
-> Read AGENTS.md, AI_ONBOARDING.md, DEVELOPMENT_ROADMAP.md and
-> docs/REFACTOR_HANDOFF.md. Inspect the current worktree. Start the next eligible M0
-> inventory/provenance slice, explaining what I should investigate myself and what you
-> will handle. Use synthetic data, preserve existing changes/runtime data, and do not
-> implement later milestones or declare my learning exercise complete without evidence.
+> Read the roadmap and this handoff; inspect the current worktree. Implementation is
+> delegated, and learning is tracked separately. M1 engineering is complete. M0 host
+> cleanup is explicitly deferred. Start M2 only after owner authorization and stop at
+> its milestone boundary. Preserve runtime data and existing worktree changes.
 
 ## Record after each implementation slice
 
@@ -132,3 +131,374 @@ Append a dated entry with:
 - engineering gate status, unresolved risks and exact next action.
 
 Keep current status table synchronized. Updating a checkbox is not acceptance evidence.
+
+## 2026-09-12 — M0 slice 1: inventory and test-data isolation
+
+Implementation delegated explicitly by the owner, including tests and documentation;
+a separate learning agent owns exercises. Pending learning does not block technically
+eligible work. No authorization to commit, push, delete runtime data or rewrite history.
+
+- Added `docs/DATA_INVENTORY.md`: artifacts, trust boundaries, persisted copies,
+  deletion gaps and explicit unknown provenance. Owner provenance question is pending.
+- Changed `.gitignore` to cover nested upload/parsed/Chroma paths. Before the change,
+  `git check-ignore --no-index` missed nested uploads and parsed Markdown.
+- Replaced `tests/test_parser.py`'s tracked-PDF/contact-printing smoke test with a
+  temporary, newly authored synthetic PDF and real extraction assertions.
+- Ran `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. .venv/bin/python -m pytest
+  tests/test_parser.py -p no:cacheprovider -q`: 1 passed; PyMuPDF deprecation warnings.
+- Inspected path history, compared PDF hashes (identical), and counted notebook cells
+  and outputs (4 / 0). No historical PII clearance or synthetic provenance inferred.
+- No AI behavior change; no benchmark version exists or model-quality delta measured.
+- Learning-agent handoff: trace upload -> normalization -> Markdown -> checkpoints;
+  compare workflow state with retained copies; inspect `resume.py`, `rag/retriever.py`,
+  `graph/checkpointer.py`. Discuss why ignore rules cannot erase tracked/history blobs.
+  Owner learning remains pending/not assessed.
+- Next eligible independent slice: text-only voice default and disabled-path checks.
+  M0 stays open pending provenance and reproducible setup evidence; M1 is not started.
+
+## 2026-09-12 — M0 slice 2: authorized removals and text-only contract
+
+Implementation complete for this slice; M0 remains open.
+
+- Owner requested removing the four TXT fixtures, both PDF copies and notebook;
+  separately approved removal of `data/exported_prompts.json`. Those eight paths
+  are removed from the working tree. No provenance assertion, history rewrite,
+  commit, push or unrelated runtime deletion occurred. The inventory records the
+  historical-copy limitation and a bounded future review/remediation scope.
+- `backend/app/config.py` defaults voice off. The existing REST/WS guards already
+  avoid voice initialization when disabled; no orchestration or wire-schema change
+  was needed. `tests/test_voice_baseline.py` adds actual HTTP route checks and a
+  real in-memory graph/WS rejection-and-ping check proving no checkpoint mutation.
+- `ResumeUploader.tsx` and the interview page default to chat. The page falls back
+  to chat if voice capabilities are unavailable; `InterviewRoom.tsx` hides recording
+  until STT availability is reported. Existing `VoiceStatus` TypeScript/API fields
+  are reused. No mandatory camera/microphone permission is introduced for text.
+- README, onboarding, contributing guide, inventory and
+  `docs/decisions/0001-text-only-baseline.md` describe the implemented contract.
+- Regression before config change: `tests/test_voice_baseline.py` had 1 failure
+  (default unexpectedly true), 6 passes. Final focused run after adding WS coverage:
+  8 passed. Final full command `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=.
+  .venv/bin/python -m pytest tests/ -p no:cacheprovider -q`: 29 passed;
+  five PyMuPDF deprecation warnings.
+- `.venv/bin/ruff check backend rag/retriever.py tests --config pyproject.toml` and
+  `.venv/bin/black --check backend rag/retriever.py tests`: passed.
+- From `frontend`, `./node_modules/.bin/tsc --noEmit --incremental false` and
+  `npm run lint`: passed after final frontend edits.
+- `npm run build`: first failed because the sandbox blocked Turbopack's local
+  worker port; authorized rerun outside sandbox passed. Build warns that
+  baseline-browser-mapping data is old. No dependency upgrade was made for that warning.
+- Root/nested synthetic upload, parsed-resume and Chroma probe paths are ignored
+  (`git check-ignore --no-index`). `git diff --check` passed during review.
+- No AI behavior was changed. Dataset/benchmark version and model-quality delta
+  are not applicable/not measured; deterministic tests are not quality benchmarks.
+
+### Clean-setup evidence and limitations
+
+A temporary source copy contains pyproject/lock/README, backend, rag, tests and
+tracked frontend sources, excluding removed data and local environment files.
+Its path is saved in `/tmp/resume-griller-m0-setup-path`; no existing environment
+was replaced. This verifies a clean source-copy install, not a committed checkout.
+
+- `uv sync --frozen --extra dev --offline --project <temporary-copy>` initially
+  hit sandbox cache access; authorized rerun found the locked Torch wheel absent.
+- `uv sync --frozen --extra dev --project <temporary-copy>` downloaded dependencies
+  but failed on a pypdfium2 wheel download timeout. Longer-timeout retry recorded below.
+- `npm ci --prefix <temporary-copy>/frontend --cache /tmp/resume-griller-npm-cache
+  --no-audit --no-fund` failed. Its local log shows repeated registry.npmjs.org
+  ENOTFOUND errors followed by npm's `Exit handler never called` error. Clean
+  frontend installation remains unverified; existing-install type/lint/build passes
+  do not substitute for it. Retry in an environment with working registry DNS.
+
+### Remaining prerequisites and learning-agent handoff
+
+- Historical artifact disposition remains unresolved. Removal does not establish
+  synthetic origin or erase historical copies. Follow the inventory's prepared scope;
+  history rewriting/remote changes require separate authorization.
+- Retry unsuccessful clean setup, then run checks in those new environments.
+- M1 startup/follow-up issues were reconfirmed by current code inspection (initial
+  state overwrites action; evaluator indexes the main question). They were not fixed
+  or freshly reproduced as behavioral tests in this M0 slice. Other historical
+  model-quality/lifecycle findings remain reproduction targets, not new test claims.
+- Live providers, browser/device behavior, optional voice provider success/failure,
+  checkpoint restart recovery and model-quality benchmarks were not verified.
+  Public beta/real-user processing remain blocked until M9.
+- Learning-agent topics: fail-closed capability UI versus provider health; lazy client
+  initialization; a real graph at a WS test seam; synthetic PDF extraction; why a
+  clean install and an existing-install build provide different evidence. Relevant
+  paths: config, voice/WS routes, `tests/test_voice_baseline.py`, interview page,
+  `tests/test_parser.py`, and the data inventory. Owner learning: pending/not assessed.
+- Next action: resolve historical distribution disposition and clean-setup failures.
+  Do not start M1 until M0 engineering gates are resolved and the owner authorizes
+  the next milestone. No learning exercise is a prerequisite for implementation.
+
+Clean-setup follow-up:
+
+- `UV_HTTP_TIMEOUT=120 UV_CONCURRENT_DOWNLOADS=4 uv sync --frozen --extra dev
+  --project <temporary-copy>`: passed, installing the locked dependencies into a
+  new temporary virtual environment. An automatic permission-review timeout on
+  this retry was retried successfully; no permission denial remains.
+- Temporary-copy `.venv/bin/python` with an actual application `TestClient` lifespan:
+  startup/shutdown passed; `/health` and `/api/v1/voice/status` returned 200 and
+  reported voice disabled. No dotenv file or voice credentials were required.
+- `npm ci --offline --prefix <temporary-copy>/frontend --no-audit --no-fund`:
+  failed with ENOTCACHED for Zustand. Together with registry DNS failures above,
+  this leaves clean frontend setup unverified; no lockfile changes were made.
+- In the temporary copy, `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=.
+  .venv/bin/python -m pytest tests/ -p no:cacheprovider -q`: 29 passed, five
+  PyMuPDF deprecation warnings. Temporary-environment Ruff and Black checks using
+  the same commands above also passed. Python clean setup is now verified;
+  the remaining setup issue is frontend installation.
+- Final local Markdown target check found no missing links in the changed guides;
+  `git diff --check` passed. Existing `.claude/settings.local.json` changes preserved.
+
+
+## 2026-09-15 — M0 slice 3: clean frontend verification and historical review
+
+Both requested tasks completed. No application code changed in this slice.
+M0 remains open for historical data disposition/remediation, not setup or learning.
+
+- Inspected current branch, dirty worktree and recent commits; preserved all existing
+  changes, including `.claude/settings.local.json`. No commit/push/rewrite performed.
+- Created a fresh temporary frontend source copy from existing tracked source paths,
+  using current worktree contents. Excluded deleted artifacts, data, local dotenv,
+  node_modules and build output. Path recorded in `/tmp/rg-m0-frontend-path`.
+- `npm ci --prefix <temporary-frontend> --cache /tmp/rg-m0-npm-cache --no-audit
+  --no-fund`: passed (430 packages). No existing installation or lockfile changed.
+- From that fresh directory: `./node_modules/.bin/tsc --noEmit --incremental false`,
+  `npm run lint`, and `npm run build`: all passed. Build ran with permission for
+  Turbopack's local worker port, without `.env.local`. Existing stale
+  baseline-browser-mapping warning persists; no dependency upgrade was introduced.
+- Historical review: `git rev-list --all`, `git ls-tree -r -z`, `git cat-file blob`,
+  and `git for-each-ref --format=%(refname)` traversed 71 locally reachable commits.
+  Selected eight removed paths resolved to seven unique blobs; identical copies
+  matched only the known PDF pair. PDF extraction stayed in memory via PyMuPDF.
+- Sanitized pattern counts found contact-like data in four TXT fixtures, PDF, and
+  notebook source. No selected blob matched the limited credential patterns used;
+  this is not a comprehensive secret/PII clearance. Remote-tracking refs are local
+  snapshots; no fetch or remote inspection occurred. Origin remains unknown.
+- Added `docs/HISTORICAL_DATA_REVIEW.md` with blob identities, reachability, method,
+  limitations and concrete remediation scope; updated inventory and this handoff.
+- No backend tests rerun for these documentation/verification changes. Prior Python
+  clean-install evidence remains dated 2026-09-12. No AI behavior or benchmark change;
+  model-quality delta not applicable/not measured. Browser/live providers not tested.
+- Learning-agent handoff: Git tree removal versus blob reachability, source data in
+  notebooks without outputs, regex evidence versus provenance, and clean locked
+  dependency installation. Relevant docs: historical review and inventory. Owner
+  learning remains pending/not assessed and does not block technical work.
+- Exact next action: obtain authorization for the historical remediation scope (or
+  verified provenance that changes disposition), then execute/verify that scope.
+  History rewriting/force pushes remain unauthorized. Report M0 completion only
+  after its engineering gate is satisfied; do not automatically start M1.
+- Final checks: `git diff --check` passed; local Markdown link checks for the three
+  changed documents passed. Historical review outputs contain only artifact paths,
+  blob identities, counts and ref names, not contact values or source payloads.
+
+
+## 2026-09-20 — M0 slice 4: isolated historical remediation
+
+- Owner chose artifact removal, explicitly authorized an isolated local rewrite and
+  verification, and stated they are the only repository user. Learning remains
+  pending/not assessed; provenance remains unknown, with removal as disposition.
+- Completed the isolated rewrite and exhaustive selected-path/blob/tree/ref checks.
+  See `HISTORY_REMEDIATION.md` for candidate location, exact method, initial rejected
+  attempt, corrected remote-snapshot preservation, commands/results and promotion map.
+- Verification: all 71 original commits mapped; all 14 refs accounted for; zero
+  selected blobs reachable or physically present; zero unrelated tree changes;
+  `git fsck --full --no-reflogs` passed; source worktree hash comparison passed.
+- Read-only `git ls-remote --heads --tags origin` succeeded: five branch tips are
+  represented in the map, no tags advertised. No fetch, push or remote write occurred.
+- Changed docs: remediation report, historical review/inventory cross-links and this
+  handoff. No application edits; prior dated runtime/setup checks were not rerun.
+  Benchmark/model-quality delta not applicable; no AI behavior changed.
+- Learning-agent handoff: reachability versus physical object removal, Git ref
+  namespaces, remote-tracking versus local branches, commit-map/tree invariants,
+  and explicit force-push leases. Relevant code/evidence: filter-repo commit map,
+  remediation report and its old/new branch table. No owner understanding inferred.
+- Next action: approve/promote sanitized remote branch replacements and deliberately
+  adopt sanitized history while preserving pending M0 changes. Current clone and
+  remote still contain historical artifacts; M0 remains open for that scope. Do not
+  start M1 automatically. No source rewrite/commit/push has been performed.
+
+
+## 2026-09-20 — M0 slice 5: authorized remote promotion and local adoption
+
+- Completed the authorized atomic push with explicit old-tip leases for the five
+  branches; read-back matched the prepared IDs. No ordinary implementation commit.
+- Discovered and preserved all three stashes, including reflog-only history; extended
+  isolated tree comparisons to 75 commits with zero unrelated changes. Installed
+  sanitized Git metadata while leaving worktree files unchanged (hash-verified).
+- Active local refs/reflogs: eight removed paths absent, seven blobs physically
+  absent; `git fsck --full` passed. Unstaged implementation/user changes remain,
+  including `.claude/settings.local.json`; the eight historical deletions no longer
+  appear as worktree deletions because sanitized HEAD never contains those paths.
+- Preserved original Git metadata in the private sibling recovery directory documented
+  in HISTORY_REMEDIATION. No runtime data deleted. That backup is not distributable.
+- Fresh remote `git clone --mirror` revealed PR refs 1–5 still retaining all seven
+  blobs. Remote absence assertion failed as intended. Branch histories are clean;
+  full remote history is not. Subsequent scan: 117 remote commits, five affected PR
+  refs, seven retained blobs; fsck passed. Mirror marked private/DO NOT DISTRIBUTE.
+- Read-only GitHub API checks: affected PRs all closed/merged; repository reports zero
+  forks. Checked official GitHub documentation: PR refs are read-only; eligible
+  cleanup requires Support and non-sensitive data is not eligible for that process.
+- Added a factual support-request draft with unknown provenance, PR IDs and first
+  changed commit. No message sent, no PR changed/deleted, no repository deleted.
+- Updated handoff/remediation/inventory/README to distinguish completed branch/local
+  work from unresolved PR retention. No app edits or model-quality change; benchmark
+  delta not applicable. Earlier Python/frontend acceptance evidence remains dated;
+  no unnecessary application test rerun after hash-preserving metadata adoption.
+- Learning-agent handoff: atomic ref updates and explicit leases; refs versus reflogs;
+  retaining stashes during metadata replacement; branch-only versus complete remote
+  verification; host-managed refs. Owner learning pending/not assessed, not a blocker.
+- Exact next action: owner reviews/authorizes the prepared GitHub request. If Support
+  requires provenance/sensitivity confirmation, obtain the missing fact rather than
+  inventing it. After cleanup, repeat full remote mirror verification. M0 remains
+  open for this host-side issue; do not begin M1 or claim global erasure.
+
+
+## 2026-09-20 — Owner decision: defer host cleanup, authorize M1
+
+The owner chose to skip GitHub host cleanup for now and proceed to M1 if it does not
+impede the interview work. Retained PR refs do not affect local graph execution,
+so this is accepted as an explicit M0 dependency exception for synthetic-data work.
+No real/synthetic provenance is inferred and no Support message is sent. Historical
+distribution and M9 release gates remain open; owner learning remains pending.
+
+## 2026-09-20 — M1 slice 1: real session startup
+
+- Reproduced two failures with synthetic input: actual HTTP creation traversed the
+  real graph but failed Pydantic response validation on null content; an invalid
+  graph action with initial `error=None` returned null error content.
+- Changed both invocation adapters to apply initial defaults before the explicit
+  command, and to distinguish missing answers from falsey values. Normalized nullable
+  graph response fields; `handle_error` now supplies nonempty fallback text.
+- Added `tests/test_interview_flow.py` using the real graph, real GrillingEngine and
+  temporary Markdown retriever with mocked external LLM calls. No runtime data used.
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. .venv/bin/python -m pytest
+  tests/test_interview_flow.py -p no:cacheprovider -q`: initially 2 failed.
+- Same command with `tests/test_api_contract.py tests/test_graph_flow.py` added after
+  repair: 12 passed. No benchmark exists; model-quality delta not measured.
+- Learning-agent concepts: dictionary merge precedence, null versus absent defaults,
+  and why replacing a graph with a fake can hide integration defects. Learning pending.
+- Next slice: active turn identity, follow-up scoring/reconnect and one shared policy.
+  Later shared invocation work will replace the duplicated adapter input construction.
+
+## 2026-09-20 — M1 slice 2: actual turns and shared follow-up policy
+
+- Added three deterministic regressions that failed before changes: sufficient first
+  answer was forced into a follow-up; repeated follow-up answers used the main prompt;
+  REST/reconnect returned the main prompt instead of the active follow-up.
+- Added checkpointed active-question records and stable session/question/follow-up IDs.
+  Candidate messages and current evaluations identify the question actually answered.
+  Legacy checkpoints derive their active prompt read-only from conversation; missing
+  follow-up text is never guessed from the main question. Terminal states have none.
+- Graph nodes, REST detail and WS connected/resume projections use that active turn.
+  Updated public detail/conversation fields and frontend types; chat reconnect marks
+  follow-ups correctly. No second workflow store or runtime migration was introduced.
+- Added `core/follow_up_policy.py` (`follow-up-v1`), shared by engine and graph.
+  Preserved the engine's existing thresholds/gap rules; removed evaluator mutation
+  that separately forced follow-ups. A sufficient high-scoring first answer can now
+  advance; insufficient later answers no longer require a gap label to trigger one.
+- Files: graph state/nodes/edges, grilling engine and new policy, session/WS adapters,
+  frontend types/chat, integration tests and policy regression matrix.
+- Focused startup/turn/API/graph run: 15 passed. Ruff passed after fixing a Python 3.11
+  f-string syntax issue caught by lint. Added 10 policy cases for cap, threshold and
+  gap boundaries; final combined result recorded with subsequent verification.
+- Deterministic delta: the three new defect cases changed from fail to pass. These
+  are software/controlled-output evaluation cases, not a model-quality benchmark.
+  Human-reviewed benchmark and measured quality delta remain unavailable until M3.
+- Learning-agent concepts: prompt identity versus main-question index, projections,
+  lazy legacy compatibility, pure shared policies. Owner learning pending/not assessed.
+- Next slice: shared command validation/invocation; lifecycle parity and invalid-input
+  recovery. Provider-output validity/score calibration remain M2/M3, not claimed fixed.
+
+
+## 2026-09-20 — M1 slice 3: shared commands and lifecycle acceptance
+
+- Completed `graph/commands.py` and `transitions.py`: both REST/WS validate the latest
+  graph checkpoint before provider creation or invocation. No separate state store.
+  Graph routing uses the same preconditions as a defensive check; asking/start resumes
+  without regenerating. Skip/end do not initialize model providers.
+- Before correction, the completed-session/end regression changed completed to cancelled
+  (HTTP 200), and whitespace answers were accepted (HTTP 200). Both now reject with 400;
+  shared rejected commands leave checkpoint state unchanged. Busy phases reject 409.
+- Changed session/WS adapters, graph edges/builder/nodes, graph usage documentation,
+  API/graph/integration tests, frontend types and chat/video terminal reconnect handling.
+  Fixed the frontend detail type's inherited list-only field. Updated README/onboarding,
+  the smoke script's obsolete forced-first-follow-up wording, and decision 0002 with
+  lifecycle table, compatibility, failure boundaries and policy tradeoffs.
+- Added real graph/engine cases for multi-question WS progression, skip of an active
+  follow-up, repeated read-only start, terminal/busy commands, malformed input, pending
+  cancellation, provider-setup rejection, provider-independent skip/end, legacy follow-up
+  recovery/refusal and the compact custom evaluation path. Temporary synthetic inputs;
+  no real provider, STT/TTS, Chroma or runtime data calls in these cases.
+- Verification commands actually run:
+  - `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. .venv/bin/python -m pytest tests/ -p no:cacheprovider -q`:
+    **73 passed**, five existing PyMuPDF/SWIG deprecation warnings.
+  - `.venv/bin/ruff check backend rag/retriever.py tests --config pyproject.toml`:
+    passed; `.venv/bin/black --check backend rag/retriever.py tests`: passed (43 files).
+  - `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. .venv/bin/python scripts/test_graph.py`:
+    passed start/answer/follow-up/skip/end smoke run. This older smoke mocks the engine;
+    the new integration suite exercises the real engine.
+  - In `frontend`: `./node_modules/.bin/tsc --noEmit --incremental false` and
+    `npm run lint`: passed. `npm run build`: passed with sandbox escalation for the
+    local Turbopack worker; only stale baseline-browser-mapping warnings/npm notice.
+  - `git diff --check`: passed. Additional smoke-script Ruff check found an unused
+    MagicMock import after removing its obsolete stub; removed it. Black requested
+    formatting for the script; ran `.venv/bin/black scripts/test_graph.py`, then
+    its Ruff/Black checks, `git diff --check` and the smoke command again: all passed.
+- Policy version: `follow-up-v1`. Ten fixed policy decisions and targeted integration
+  regressions establish deterministic routing/targeting changes. No model/prompt/rubric
+  benchmark was run; dataset/model quality delta is **not measured**. Prompt templates
+  and existing truncation budgets remain unchanged; actual follow-up prompt selection
+  is corrected. No threshold calibration claim.
+- M1 acceptance: session creation runs the real graph; main/repeated follow-up answers
+  link to the presented question; start/answer/advance/skip/end/terminal/invalid cases
+  are covered; both transports use shared validation; graph and engine use one policy;
+  reads/reconnect project the active follow-up. Owner explanation/learning remains
+  pending/not assessed under explicit implementation delegation.
+- Limitations: live provider/browser behavior and SQLite process-restart/concurrency
+  are unverified here; invalid model output (M2), quality benchmark (M3), durable ledger
+  (M4), retries/recovery (M5) remain open. Existing fallback behavior is not improved by
+  these tests. Terminal reconnect UI passed types/lint/build, not browser automation.
+- Learning-agent handoff: study `commands.execute_command` and `transitions.command_error`
+  as validation versus orchestration; trace `state.QuestionTurn` through evaluate and
+  follow-up nodes; compare append-only conversation reducers to replaceable active state.
+  Explore why a route fake hid startup merging, why deterministic policy checks are not
+  a quality benchmark, and why stable turn IDs alone do not make retries safe.
+- Exact next action: await explicit M2 authorization, then reproduce invalid model
+  output handling with synthetic tests and add validated contracts/CI per the roadmap.
+  Do not begin M2 automatically. No implementation commit, push or deployment performed.
+
+
+## 2026-09-20 — Owner-authorized traceable local commits
+
+The owner requested commits that make the implementation details traceable for learning.
+Used focused conventional commits, preserving the original implementation chronology
+in earlier dated entries rather than claiming each development slice was committed then.
+
+- `af60e12`: M0 synthetic parser fixture, nested runtime ignore rules, voice defaults,
+  capability-gated frontend, baseline tests and decision 0001.
+- `c7c1d2a`: coupled M1 graph/engine/transport changes, synchronized types/UI,
+  real-component regression tests, smoke updates and decision 0002.
+- A following documentation commit records runtime guidance, historical-data evidence,
+  the owner dependency exception, this handoff and the commit reading guide.
+
+See [M0–M1 commit reading guide](M0_M1_COMMIT_GUIDE.md) for the execution path and
+read-only Git commands. Implementation and test changes stay together; no fake
+intermediate red/green history was manufactured. The voice and M1 hunks in
+InterviewRoom were staged separately without modifying the working file.
+
+Verification of commit boundaries: exported each implementation commit with
+`git archive HEAD` into a fresh temporary directory, then ran the repository's
+`.venv/bin/python -m pytest tests/ -p no:cacheprovider -q` with PYTHONPATH set to
+that exported source and bytecode disabled. The committed M0 snapshot passed 29
+checks; the committed M1 snapshot passed 73 checks. Both reported only the five
+existing PyMuPDF/SWIG deprecation warnings. Dependencies
+were reused from the existing venv; this was not another clean dependency install.
+Full frontend build/type/lint and Python quality evidence above still applies to the
+unchanged implementation. Final staged whitespace and file inventory checks are part
+of this commit pass. No runtime payloads or local settings were staged.
+
+Owner learning remains pending/not assessed. M2 remains eligible but unauthorized.
+The earlier 'uncommitted'/'no commit authorized' statements are dated historical
+records superseded by this explicit owner request; no new push or deployment occurred.

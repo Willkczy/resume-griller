@@ -21,11 +21,15 @@ remain thin adapters over the same graph.
 
 1. A PDF/TXT resume is uploaded.
 2. Text is extracted and Groq converts it to structured Markdown.
-3. `POST /api/v1/sessions` loads the complete Markdown into `InterviewState`; its
-   intended first-question generation currently has the startup defect noted below.
-4. Each answer, skip, or end request invokes the graph with the same `thread_id`.
+3. `POST /api/v1/sessions` loads the complete Markdown into `InterviewState` and
+   generates the first question through the graph.
+4. REST and WS call `graph.commands.execute_command`, which validates the latest
+   checkpoint before invoking the graph with the same `thread_id`. A start on an
+   asking session projects its active turn without writing or regenerating it.
 5. Graph nodes call `GrillingEngine` and the selected LLM service.
-6. REST and WebSocket adapters map internal phases to the public lifecycle.
+6. The graph records the actual active prompt and stable turn IDs. Evaluation targets
+   that prompt; one pure policy selects follow-up/advance. REST and WS project the
+   same active turn and map internal phases to the public lifecycle.
 
 Internal phases such as `asking` and `evaluating` must not leak to clients. The
 public status values are `pending`, `in_progress`, `completed`, and `cancelled`.
@@ -86,10 +90,10 @@ Read [DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md) for the revised M0–M9 se
 and [docs/REFACTOR_HANDOFF.md](docs/REFACTOR_HANDOFF.md) for current progress and the
 next eligible slice. The dated test/assessment evidence lives there, not in this guide.
 
-The first work is M0 data/provenance inventory and a tested voice support decision.
-Then repair the real session-start/follow-up flow, introduce validated model contracts,
-build a human-reviewed benchmark, persist feedback, and test recovery. Basic CI belongs
-early, in M2. JD/adaptive functionality is optional; controlled deployment is M9.
+The sequence establishes a safe local baseline and correct interview flow before
+validated model contracts, a human-reviewed benchmark, durable feedback and recovery.
+Basic CI belongs in M2. JD/adaptive functionality is optional; controlled deployment
+is M9. Current completion and scoped owner exceptions are recorded in the handoff.
 
 For each slice, state the owner exercise, agent scope and acceptance checks. Let the
 owner implement the concept being learned unless explicitly delegated. Update the
@@ -102,14 +106,14 @@ handoff with engineering evidence and owner learning status separately.
 - Rate limiting is process-local and does not protect every WebSocket operation.
 - Evaluation history is not append-only; changing questions can clear the current
   evaluation and the final report is still count-based.
-- Session creation overwrites its start action with null initial state and can fail
-  response validation before generating questions.
-- Follow-up answers are evaluated against the original question; reconnect can return
-  that original question too.
+- Sequential command validation does not provide concurrency or idempotency guarantees.
+- Older checkpoints recover active prompts without migration; a missing follow-up
+  prompt causes a 409 rejection rather than guessing the main question.
 - Empty/unbounded model evaluation output is not safely rejected.
 - Full resume text is stored in state but evaluation prompts truncate context.
-- Voice is batch-based. `.env.example` disables it safely, but the Python setting
-  defaults to enabled and the root dependency set lacks the ElevenLabs SDK.
+- Voice is batch-based and disabled by default in settings and `.env.example`.
+  The root dependency set lacks ElevenLabs; live voice remains experimental.
+  See `docs/decisions/0001-text-only-baseline.md`.
 - Custom/Hybrid mode requires a separately hosted OpenAI-compatible model.
 - No CI workflow, production container configuration, or frontend test suite exists.
 - No real-user processing or public beta is allowed before roadmap M9 passes.
