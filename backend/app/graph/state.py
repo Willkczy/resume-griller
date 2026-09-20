@@ -36,6 +36,17 @@ from typing import Annotated, Any, Literal, TypedDict
 # No separate session store needed.
 
 
+class QuestionTurn(TypedDict):
+    """The exact prompt currently presented, with a stable identity within a session."""
+
+    question_id: str
+    parent_question_id: str | None
+    prompt: str
+    is_follow_up: bool
+    question_index: int
+    follow_up_count: int
+
+
 class InterviewState(TypedDict, total=False):
     """
     State schema for the interview graph.
@@ -75,6 +86,7 @@ class InterviewState(TypedDict, total=False):
     resume_context: str  # Full parsed resume copied for the current question cycle
 
     # ─── Current Interaction (set/cleared each graph invocation) ───
+    active_question: QuestionTurn | None
     current_answer: str | None  # The answer being evaluated right now
     current_evaluation: dict | None  # Result from GrillingEngine.evaluate_answer()
 
@@ -157,6 +169,7 @@ def create_initial_state(
         current_follow_up_count=0,
         resume_context="",
         # Interaction — empty until first invocation
+        active_question=None,
         current_answer=None,
         current_evaluation=None,
         # Conversation — empty, will be appended to
@@ -201,3 +214,64 @@ def calculate_duration_seconds(state: InterviewState) -> float:
         return max(0.0, (updated - created).total_seconds())
     except (KeyError, TypeError, ValueError):
         return 0.0
+
+
+def make_question_turn(
+    state: InterviewState, prompt: str, follow_up_count: int = 0
+) -> QuestionTurn:
+    """Stable sequential IDs; command idempotency/concurrency belongs to M5."""
+    index = state["current_question_index"]
+    main_id = f"{state['session_id']}:q{index + 1}"
+    return QuestionTurn(
+        question_id=f"{main_id}:f{follow_up_count}" if follow_up_count else main_id,
+        parent_question_id=main_id if follow_up_count else None,
+        prompt=prompt,
+        is_follow_up=follow_up_count > 0,
+        question_index=index,
+        follow_up_count=follow_up_count,
+    )
+
+
+def get_active_question(state: InterviewState) -> QuestionTurn | None:
+    """Read the active prompt; derive older checkpoints in memory without rewriting data."""
+    if state.get("status") not in {"asking", "evaluating"}:
+        return None
+    active = state.get("active_question")
+    if active:
+        return active
+    questions = state.get("questions", [])
+    index = state.get("current_question_index", 0)
+    if not 0 <= index < len(questions):
+        return None
+    count = state.get("current_follow_up_count", 0)
+    for message in reversed(state.get("conversation", [])):
+        if message.get("role") == "interviewer":
+            if bool(message.get("is_follow_up")) != (count > 0):
+                return None
+            prompt = message.get("content")
+            if not isinstance(prompt, str) or not prompt.strip():
+                return None
+            if count == 0 and prompt != questions[index]:
+                return None
+            return make_question_turn(state, prompt, count)
+    # A legacy main question is recoverable by index. Never guess a lost follow-up.
+    return make_question_turn(state, questions[index]) if count == 0 else None
+
+
+def active_question_response(state: InterviewState) -> dict:
+    """Projection for a read/resume; it does not append messages or advance the graph."""
+    active = get_active_question(state)
+    if active is None:
+        raise ValueError("No active question is available")
+    return {
+        "response_type": "follow_up" if active["is_follow_up"] else "question",
+        "response_content": active["prompt"],
+        "response_data": {
+            "question_number": active["question_index"] + 1,
+            "total_questions": len(state.get("questions", [])),
+            "question_id": active["question_id"],
+            "parent_question_id": active["parent_question_id"],
+            "is_follow_up": active["is_follow_up"],
+            "follow_up_count": active["follow_up_count"],
+        },
+    }

@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from backend.app.api.routes import session, websocket
+from backend.app.graph.services import GraphServices
 from backend.app.graph.state import create_initial_state
 from backend.app.main import app
 
@@ -95,7 +96,7 @@ async def test_invoke_graph_adds_updated_at_and_maps_response(monkeypatch):
     }
     fake = FakeGraph(session_values(), result=result)
     monkeypatch.setattr(session, "get_compiled_graph", AsyncMock(return_value=fake))
-    monkeypatch.setattr(session.GraphServices, "create", Mock(return_value=Mock()))
+    monkeypatch.setattr(GraphServices, "create", Mock(return_value=Mock()))
 
     response = await session._invoke_graph("session-1", "skip")
     assert response.type == "question"
@@ -130,7 +131,7 @@ def test_websocket_resume_ping_answer_and_voice_toggle(monkeypatch):
     }
     fake = FakeGraph(session_values(), result=result)
     monkeypatch.setattr(websocket, "get_compiled_graph", AsyncMock(return_value=fake))
-    monkeypatch.setattr(websocket.GraphServices, "create", Mock(return_value=Mock()))
+    monkeypatch.setattr(GraphServices, "create", Mock(return_value=Mock()))
     voice = AsyncMock(return_value=None)
     monkeypatch.setattr(websocket, "generate_voice_response", voice)
 

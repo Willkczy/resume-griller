@@ -130,11 +130,14 @@ export function InterviewRoom({ sessionId }: InterviewRoomProps) {
                   role: 'interviewer' as const,
                   content: currentQuestion,
                   timestamp: new Date(),
-                  isFollowUp: false,
+                  isFollowUp: message.data?.is_follow_up ?? false,
                 },
               ];
             });
             setIsLoading(false);
+          } else if (message.data?.status === 'completed' || message.data?.status === 'cancelled') {
+            setStatus(message.data.status);
+            router.push(`/result/${sessionId}`);
           } else if (message.data?.status === 'pending') {
             // Need to start the interview
             console.log('[InterviewRoom] Starting interview...');

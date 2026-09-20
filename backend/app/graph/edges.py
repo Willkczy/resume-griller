@@ -29,7 +29,9 @@ They never modify state or call external services.
 
 from __future__ import annotations
 
+from backend.app.core.follow_up_policy import should_follow_up
 from backend.app.graph.state import InterviewState
+from backend.app.graph.transitions import command_error
 
 
 def route_action(state: InterviewState) -> str:
@@ -42,46 +44,21 @@ def route_action(state: InterviewState) -> str:
     Returns one of: "start", "answer", "skip", "end", "error"
     """
     action = state.get("action")
-    if action in ("start", "answer", "skip", "end"):
-        return action
-    return "error"
+    if command_error(state, action, state.get("current_answer")):
+        return "error"
+    if action == "start" and state.get("status") == "asking":
+        return "resume"
+    return action
 
 
 def route_after_evaluate(state: InterviewState) -> str:
-    """
-    After evaluating an answer: should we grill, advance, or finish?
-
-    This is the core decision point of the interview:
-    - "grill"   → ask a follow-up question (gap detected, haven't hit max)
-    - "advance" → move to next question (answer sufficient or max follow-ups hit)
-    - "done"    → interview complete (was the last question AND no more grilling)
-
-    The logic mirrors GrillingEngine.should_grill() but reads from state.
-    We re-implement the decision here rather than calling should_grill()
-    because the evaluation result is already in state as a dict, and
-    this keeps edge functions pure (no service calls).
-    """
-    evaluation = state.get("current_evaluation", {})
-    follow_up_count = state["current_follow_up_count"]
-    max_follow_ups = state["max_follow_ups"]
-
-    # Check if we should ask a follow-up
-    # Mirrors GrillingEngine.should_grill():
-    #   - Max follow-ups reached → no
-    #   - First answer (count=0) → always yes (forced first follow-up)
-    #   - Gaps detected → yes
-    #   - Answer sufficient → no
-    if follow_up_count < max_follow_ups:
-        is_sufficient = evaluation.get("is_sufficient", True)
-        gaps = evaluation.get("gap_analysis", {}).get("detected_gaps", [])
-
-        # Forced first follow-up: always dig deeper on the first answer
-        if follow_up_count == 0:
-            return "grill"
-
-        # If gaps detected, keep grilling
-        if gaps and not is_sufficient:
-            return "grill"
+    """Use the shared policy, then advance or finish the final main question."""
+    if should_follow_up(
+        state["current_evaluation"],
+        state["current_follow_up_count"],
+        state["max_follow_ups"],
+    ):
+        return "grill"
 
     # No more grilling — check if this was the last question
     next_idx = state["current_question_index"] + 1

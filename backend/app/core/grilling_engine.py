@@ -15,6 +15,10 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 
+from backend.app.core.follow_up_policy import (
+    SUFFICIENT_SCORE_THRESHOLD,
+    should_follow_up,
+)
 from backend.app.core.logging_config import get_logger
 from backend.app.services.llm_service import BaseLLMService
 
@@ -277,12 +281,7 @@ class GrillingEngine:
 
     # Thresholds
     MIN_ANSWER_LENGTH = 50
-    SUFFICIENT_SCORE_THRESHOLD = 0.58
-    HIGH_SCORE_THRESHOLD = 0.72
-
-    # Follow-up settings
-    FORCE_FIRST_FOLLOWUP = True
-    MIN_FOLLOWUPS_PER_QUESTION = 1
+    SUFFICIENT_SCORE_THRESHOLD = SUFFICIENT_SCORE_THRESHOLD
 
     def __init__(
         self,
@@ -370,30 +369,6 @@ class GrillingEngine:
         except Exception as e:
             logger.error("evaluation_failed", error=str(e), exc_info=True)
             evaluation = self._fallback_evaluation(answer, question, follow_up_count)
-
-        # Apply forced first follow-up rule
-        if (
-            self.FORCE_FIRST_FOLLOWUP
-            and follow_up_count < self.MIN_FOLLOWUPS_PER_QUESTION
-        ):
-            if evaluation.score < self.HIGH_SCORE_THRESHOLD:
-                evaluation.is_sufficient = False
-                if not evaluation.suggested_follow_up:
-                    if self.use_compact_prompts:
-                        evaluation.suggested_follow_up = (
-                            await self._generate_followup_compact(
-                                question,
-                                answer,
-                                evaluation.gap_analysis,
-                                conversation_history,
-                            )
-                        )
-                    else:
-                        evaluation.suggested_follow_up = (
-                            await self._generate_gap_based_followup(
-                                question, answer, evaluation.gap_analysis, question_type
-                            )
-                        )
 
         return evaluation
 
@@ -1033,32 +1008,5 @@ Return JSON:
         follow_up_count: int,
         max_follow_ups: int,
     ) -> bool:
-        """Decide whether to ask a follow-up question."""
-        if follow_up_count >= max_follow_ups:
-            return False
-
-        if (
-            self.FORCE_FIRST_FOLLOWUP
-            and follow_up_count < self.MIN_FOLLOWUPS_PER_QUESTION
-        ):
-            if evaluation.score < self.HIGH_SCORE_THRESHOLD:
-                return True
-
-        if not evaluation.is_sufficient:
-            return True
-
-        if evaluation.score < self.SUFFICIENT_SCORE_THRESHOLD:
-            return True
-
-        significant_gaps = [
-            GapType.NO_SPECIFIC_EXAMPLE,
-            GapType.NO_METRICS,
-            GapType.UNCLEAR_PERSONAL_ROLE,
-            GapType.NO_RESULT_OUTCOME,
-            GapType.RESUME_INCONSISTENT,
-        ]
-        for gap in evaluation.gap_analysis.detected_gaps:
-            if gap in significant_gaps and follow_up_count < 2:
-                return True
-
-        return False
+        """Use the same pure decision as graph routing; do not mutate evaluation."""
+        return should_follow_up(evaluation.to_dict(), follow_up_count, max_follow_ups)

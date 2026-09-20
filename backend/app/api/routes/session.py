@@ -9,18 +9,19 @@ The graph handles: question generation, answer evaluation, follow-up
 grilling, advancing, skipping, and interview completion.
 """
 
-from datetime import UTC, datetime
-
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.api.deps import get_retriever
-from backend.app.graph import GraphServices, create_initial_state, get_compiled_graph
+from backend.app.graph import create_initial_state, get_compiled_graph
+from backend.app.graph.commands import execute_command
 from backend.app.graph.state import (
     calculate_duration_seconds,
     calculate_questions_asked,
+    get_active_question,
     normalize_public_status,
 )
+from backend.app.graph.transitions import CommandError
 from backend.app.middleware.rate_limit import limiter
 from rag.retriever import InterviewRetriever
 
@@ -80,6 +81,9 @@ class ConversationMessage(BaseModel):
     content: str
     timestamp: str
     is_follow_up: bool = False
+    question_id: str | None = None
+    parent_question_id: str | None = None
+    answer_id: str | None = None
 
 
 class SessionDetailResponse(BaseModel):
@@ -91,6 +95,9 @@ class SessionDetailResponse(BaseModel):
     model_type: str
     status: str
     current_question: str | None
+    current_question_id: str | None = None
+    parent_question_id: str | None = None
+    is_follow_up: bool = False
     current_question_index: int
     total_questions: int
     follow_up_count: int
@@ -126,10 +133,8 @@ router = APIRouter(prefix="/sessions", tags=["interview sessions"])
 async def _invoke_graph(
     session_id: str,
     action: str,
-    model_type: str = "api",
     initial_state: dict | None = None,
     current_answer: str | None = None,
-    prepared_context: dict | None = None,
 ) -> InterviewResponseModel:
     """
     Invoke the interview graph and convert the result to an API response.
@@ -138,45 +143,29 @@ async def _invoke_graph(
     The graph handles all orchestration — this function just translates
     between HTTP request/response and graph state.
     """
-    # Create services based on model type (API vs Custom/Hybrid)
-    services = GraphServices.create(model_type, prepared_context)
-
-    # Get the compiled graph (cached singleton with SQLite checkpointer)
     graph = await get_compiled_graph()
-
-    # Build the input for this invocation.
-    # For the first invocation ("start"), we pass the full initial state.
-    # For subsequent invocations, we only pass the action + answer.
-    # The checkpointer restores the rest from the previous checkpoint.
-    graph_input: dict = {"action": action}
-    if initial_state:
-        graph_input.update(initial_state)
-    if current_answer:
-        graph_input["current_answer"] = current_answer
-    graph_input["updated_at"] = datetime.now(UTC).isoformat()
-
-    # Invoke the graph with thread_id = session_id for checkpointing
-    result = await graph.ainvoke(
-        graph_input,
-        config={
-            "configurable": {
-                "thread_id": session_id,
-                "services": services,
-            }
-        },
-    )
+    try:
+        result = await execute_command(
+            graph,
+            session_id,
+            action,
+            initial_state=initial_state,
+            current_answer=current_answer,
+        )
+    except CommandError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
     # Convert graph output to API response
-    response_data = result.get("response_data", {})
+    response_data = result.get("response_data") or {}
     return InterviewResponseModel(
-        type=result.get("response_type", "error"),
-        content=result.get("response_content", ""),
+        type=result.get("response_type") or "error",
+        content=result.get("response_content") or "",
         question_number=response_data.get("question_number"),
         total_questions=response_data.get("total_questions"),
         evaluation=response_data.get("evaluation"),
         metadata={
             "session_id": session_id,
-            "model_type": model_type,
+            "model_type": result.get("model_type", "api"),
             **{
                 k: v
                 for k, v in response_data.items()
@@ -253,9 +242,7 @@ async def create_session(
     return await _invoke_graph(
         session_id=session_id,
         action="start",
-        model_type=request.model_type,
         initial_state=initial,
-        prepared_context=prepared_context,
     )
 
 
@@ -277,6 +264,7 @@ async def get_session(session_id: str):
     s = state.values
     questions = s.get("questions", [])
     idx = s.get("current_question_index", 0)
+    active = get_active_question(s)
 
     return SessionDetailResponse(
         session_id=s.get("session_id", session_id),
@@ -284,7 +272,10 @@ async def get_session(session_id: str):
         mode=s.get("mode", "mixed"),
         model_type=s.get("model_type", "api"),
         status=normalize_public_status(s.get("status")),
-        current_question=questions[idx] if idx < len(questions) else None,
+        current_question=active["prompt"] if active else None,
+        current_question_id=active["question_id"] if active else None,
+        parent_question_id=active["parent_question_id"] if active else None,
+        is_follow_up=active["is_follow_up"] if active else False,
         current_question_index=idx,
         total_questions=len(questions),
         follow_up_count=s.get("current_follow_up_count", 0),
@@ -295,6 +286,9 @@ async def get_session(session_id: str):
                 content=m.get("content", ""),
                 timestamp=m.get("timestamp", ""),
                 is_follow_up=m.get("is_follow_up", False),
+                question_id=m.get("question_id"),
+                parent_question_id=m.get("parent_question_id"),
+                answer_id=m.get("answer_id"),
             )
             for m in s.get("conversation", [])
         ],
@@ -311,80 +305,21 @@ async def submit_answer(
     request: AnswerRequest,
 ):
     """Submit an answer to the current question."""
-    # Load current state to get model_type and prepared_context
-    graph = await get_compiled_graph()
-    config = {"configurable": {"thread_id": session_id}}
-    state = await graph.aget_state(config)
-
-    if not state or not state.values:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Session not found: {session_id}",
-        )
-
-    s = state.values
-    if s.get("status") not in ("asking",):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Session is not accepting answers. Status: {s.get('status')}",
-        )
-
     return await _invoke_graph(
-        session_id=session_id,
-        action="answer",
-        model_type=s.get("model_type", "api"),
-        current_answer=request.answer,
-        prepared_context=s.get("prepared_context"),
+        session_id=session_id, action="answer", current_answer=request.answer
     )
 
 
 @router.post("/{session_id}/skip", response_model=InterviewResponseModel)
 async def skip_question(session_id: str):
     """Skip the current question and move to the next one."""
-    graph = await get_compiled_graph()
-    config = {"configurable": {"thread_id": session_id}}
-    state = await graph.aget_state(config)
-
-    if not state or not state.values:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Session not found: {session_id}",
-        )
-
-    s = state.values
-    if s.get("status") not in ("asking",):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Session is not in progress. Status: {s.get('status')}",
-        )
-
-    return await _invoke_graph(
-        session_id=session_id,
-        action="skip",
-        model_type=s.get("model_type", "api"),
-        prepared_context=s.get("prepared_context"),
-    )
+    return await _invoke_graph(session_id=session_id, action="skip")
 
 
 @router.post("/{session_id}/end", response_model=InterviewResponseModel)
 async def end_session(session_id: str):
     """End the interview session early."""
-    graph = await get_compiled_graph()
-    config = {"configurable": {"thread_id": session_id}}
-    state = await graph.aget_state(config)
-
-    if not state or not state.values:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Session not found: {session_id}",
-        )
-
-    return await _invoke_graph(
-        session_id=session_id,
-        action="end",
-        model_type=state.values.get("model_type", "api"),
-        prepared_context=state.values.get("prepared_context"),
-    )
+    return await _invoke_graph(session_id=session_id, action="end")
 
 
 @router.get("/{session_id}/summary", response_model=SessionSummaryResponse)

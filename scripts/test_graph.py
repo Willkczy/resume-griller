@@ -20,7 +20,7 @@ without API keys or a running backend.
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 # ─── Setup ───
 
@@ -83,7 +83,6 @@ def create_mock_services():
     )
 
     mock_grilling.evaluate_answer = AsyncMock(return_value=default_eval)
-    mock_grilling.should_grill = MagicMock(return_value=True)
     mock_grilling.generate_follow_up = AsyncMock(
         return_value="You mentioned improving performance. What specific metrics did you measure, and what were the before/after numbers?"
     )
@@ -142,7 +141,7 @@ async def main():
 
     This demonstrates:
     1. "start" action  → generates questions, asks first one
-    2. "answer" action → evaluates answer, generates follow-up (first answer always grilled)
+    2. "answer" action → evaluates answer, generates follow-up (synthetic weak answer)
     3. "answer" action → evaluates follow-up answer, advances to next question
     4. "skip" action   → skips a question
     5. "end" action    → ends interview early
@@ -195,7 +194,9 @@ async def main():
 
     # ─── Step 2: Answer First Question ───
     print(">>> Step 2: ANSWER QUESTION (action='answer')")
-    print("    Submitting an answer. First answer always gets a follow-up.")
+    print(
+        "    Submitting an answer. This synthetic weak answer should get a follow-up."
+    )
 
     result = await graph.ainvoke(
         {

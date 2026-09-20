@@ -159,6 +159,9 @@ export function VideoInterviewRoom({ sessionId }: VideoInterviewRoomProps) {
             if (voiceEnabledRef.current && message.audio_base64) {
               await playAudio(message.audio_base64);
             }
+          } else if (message.data?.status === 'completed' || message.data?.status === 'cancelled') {
+            setStatus(message.data.status);
+            router.push(`/result/${sessionId}`);
           } else if (message.data?.status === 'pending') {
             websocket.startInterview(
               message.data?.total_questions || 5,

@@ -83,6 +83,7 @@ def build_interview_graph() -> StateGraph:
     graph.add_node("handle_skip", nodes.handle_skip)
     graph.add_node("handle_end", nodes.handle_end)
     graph.add_node("handle_error", nodes.handle_error)
+    graph.add_node("resume_question", nodes.resume_question)
 
     # Step 3: Set entry point — first thing that runs on every invocation
     # This is a CONDITIONAL entry: route_action reads state["action"]
@@ -95,6 +96,7 @@ def build_interview_graph() -> StateGraph:
             "skip": "handle_skip",
             "end": "handle_end",
             "error": "handle_error",
+            "resume": "resume_question",
         },
     )
 
@@ -139,5 +141,6 @@ def build_interview_graph() -> StateGraph:
 
     # --- "error" flow ---
     graph.add_edge("handle_error", END)
+    graph.add_edge("resume_question", END)
 
     return graph

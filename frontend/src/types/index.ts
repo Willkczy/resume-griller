@@ -53,10 +53,16 @@ export interface ConversationMessage {
   content: string;
   timestamp: string;
   is_follow_up: boolean;
+  question_id?: string | null;
+  parent_question_id?: string | null;
+  answer_id?: string | null;
 }
 
-export interface SessionDetail extends SessionResponse {
+export interface SessionDetail extends Omit<SessionResponse, 'questions_asked'> {
   current_question: string | null;
+  current_question_id: string | null;
+  parent_question_id: string | null;
+  is_follow_up: boolean;
   follow_up_count: number;
   max_follow_ups: number;
   conversation: ConversationMessage[];
@@ -87,6 +93,10 @@ export interface InterviewResponse {
 }
 
 export interface AnswerEvaluation {
+  question_id?: string;
+  parent_question_id?: string | null;
+  answer_id?: string;
+  follow_up_policy_version?: string;
   is_sufficient: boolean;
   score: number;
   missing_elements: string[];
@@ -119,9 +129,16 @@ export interface WSMessageData {
   model_type?: ModelType;
   status?: SessionStatus;
   current_question?: string | null;
+  current_question_id?: string | null;
+  question_id?: string;
+  parent_question_id?: string | null;
+  is_follow_up?: boolean;
+  follow_up_count?: number;
   question_number?: number;
   total_questions?: number;
   confidence?: number;
+  error_code?: string;
+  status_code?: number;
   [key: string]: unknown;
 }
 

@@ -153,7 +153,18 @@ async def test_invalid_action_returns_error(services):
 
 
 def test_routes_and_public_state_helpers():
-    assert route_action({"action": "skip"}) == "skip"
+    assert (
+        route_action(
+            {
+                "action": "skip",
+                "status": "asking",
+                "session_id": "synthetic",
+                "questions": ["Q"],
+                "current_question_index": 0,
+            }
+        )
+        == "skip"
+    )
     assert route_action({}) == "error"
     assert normalize_public_status("asking") == "in_progress"
     assert normalize_public_status("evaluating") == "in_progress"

@@ -37,13 +37,18 @@ from datetime import UTC
 
 from langchain_core.runnables import RunnableConfig
 
+from backend.app.core.follow_up_policy import POLICY_VERSION
 from backend.app.core.grilling_engine import GapType
 from backend.app.graph.services import GraphServices
 from backend.app.graph.state import (
     InterviewState,
+    active_question_response,
     calculate_duration_seconds,
     calculate_questions_asked,
+    get_active_question,
+    make_question_turn,
 )
+from backend.app.graph.transitions import command_error
 
 # === Helper: extract services from config ===
 
@@ -63,7 +68,15 @@ def _get_services(config: RunnableConfig) -> GraphServices:
 # === Helper: build a conversation message dict ===
 
 
-def _msg(role: str, content: str, is_follow_up: bool = False, **metadata) -> dict:
+def _msg(
+    role: str,
+    content: str,
+    is_follow_up: bool = False,
+    question_id: str | None = None,
+    parent_question_id: str | None = None,
+    answer_id: str | None = None,
+    **metadata,
+) -> dict:
     """Create a message dict for the conversation list."""
     from datetime import datetime
 
@@ -73,6 +86,9 @@ def _msg(role: str, content: str, is_follow_up: bool = False, **metadata) -> dic
         "is_follow_up": is_follow_up,
         "timestamp": datetime.now(UTC).isoformat(),
         "metadata": metadata,
+        "question_id": question_id,
+        "parent_question_id": parent_question_id,
+        "answer_id": answer_id,
     }
 
 
@@ -190,10 +206,17 @@ async def ask_question(state: InterviewState, config: RunnableConfig) -> dict:
     # Use full resume text from state (no per-question retrieval needed)
     resume_context = state.get("full_resume_text", "")
 
-    msg = _msg("interviewer", question, question_number=idx + 1)
+    active = make_question_turn(state, question)
+    msg = _msg(
+        "interviewer",
+        question,
+        question_id=active["question_id"],
+        question_number=idx + 1,
+    )
 
     return {
         "resume_context": resume_context,
+        "active_question": active,
         "status": "asking",
         # Clear per-interaction fields from previous cycle
         "current_answer": None,
@@ -206,6 +229,10 @@ async def ask_question(state: InterviewState, config: RunnableConfig) -> dict:
         "response_data": {
             "question_number": idx + 1,
             "total_questions": len(questions),
+            "question_id": active["question_id"],
+            "parent_question_id": None,
+            "is_follow_up": False,
+            "follow_up_count": 0,
         },
     }
 
@@ -223,13 +250,23 @@ async def evaluate_answer(state: InterviewState, config: RunnableConfig) -> dict
     services = _get_services(config)
 
     answer = state["current_answer"]
-    question = state["questions"][state["current_question_index"]]
+    active = get_active_question(state)
+    if active is None:
+        raise ValueError("No active question is available")
+    question = active["prompt"]
     resume_context = state.get("resume_context", "")
     follow_up_count = state["current_follow_up_count"]
     mode = state["mode"]
 
     # Record the candidate's answer in conversation
-    answer_msg = _msg("candidate", answer)
+    answer_id = f"{active['question_id']}:answer"
+    answer_msg = _msg(
+        "candidate",
+        answer,
+        question_id=active["question_id"],
+        parent_question_id=active["parent_question_id"],
+        answer_id=answer_id,
+    )
 
     # Build conversation history (last 10 messages for context)
     existing_convo = state.get("conversation", [])
@@ -283,7 +320,14 @@ async def evaluate_answer(state: InterviewState, config: RunnableConfig) -> dict
             pass  # Non-critical — don't fail the evaluation
 
     return {
-        "current_evaluation": evaluation.to_dict(),
+        "active_question": active,
+        "current_evaluation": {
+            **evaluation.to_dict(),
+            "question_id": active["question_id"],
+            "parent_question_id": active["parent_question_id"],
+            "answer_id": answer_id,
+            "follow_up_policy_version": POLICY_VERSION,
+        },
         "status": "evaluating",
         "conversation": [answer_msg],
     }
@@ -301,7 +345,10 @@ async def generate_follow_up(state: InterviewState, config: RunnableConfig) -> d
     """Generate a follow-up question targeting the priority gap."""
     services = _get_services(config)
 
-    question = state["questions"][state["current_question_index"]]
+    active = get_active_question(state)
+    if active is None:
+        raise ValueError("No active question is available")
+    question = active["prompt"]
     answer = state["current_answer"]
     mode = state["mode"]
 
@@ -333,6 +380,7 @@ async def generate_follow_up(state: InterviewState, config: RunnableConfig) -> d
     )
 
     new_count = state["current_follow_up_count"] + 1
+    next_turn = make_question_turn(state, follow_up, new_count)
 
     # Build follow-up message with gap metadata
     priority_gap = (
@@ -346,12 +394,15 @@ async def generate_follow_up(state: InterviewState, config: RunnableConfig) -> d
         "interviewer",
         follow_up,
         is_follow_up=True,
+        question_id=next_turn["question_id"],
+        parent_question_id=next_turn["parent_question_id"],
         follow_up_number=new_count,
         priority_gap=priority_gap,
         detected_gaps=detected_gaps,
     )
 
     return {
+        "active_question": next_turn,
         "current_follow_up_count": new_count,
         "status": "asking",
         "conversation": [fu_msg],
@@ -364,6 +415,10 @@ async def generate_follow_up(state: InterviewState, config: RunnableConfig) -> d
             "evaluation": state["current_evaluation"],
             "follow_up_count": new_count,
             "priority_gap": priority_gap,
+            "question_id": next_turn["question_id"],
+            "parent_question_id": next_turn["parent_question_id"],
+            "is_follow_up": True,
+            "follow_up_policy_version": POLICY_VERSION,
         },
     }
 
@@ -379,6 +434,7 @@ async def generate_follow_up(state: InterviewState, config: RunnableConfig) -> d
 async def advance_question(state: InterviewState, config: RunnableConfig) -> dict:
     """Move to the next question."""
     return {
+        "active_question": None,
         "current_question_index": state["current_question_index"] + 1,
         "current_follow_up_count": 0,
         "current_answer": None,
@@ -445,6 +501,8 @@ async def complete_interview(state: InterviewState, config: RunnableConfig) -> d
 
     return {
         "status": "cancelled" if is_cancelled else "completed",
+        "active_question": None,
+        "current_answer": None,
         "conversation": [sys_msg],
         "response_type": "complete",
         "response_content": content,
@@ -462,7 +520,14 @@ async def complete_interview(state: InterviewState, config: RunnableConfig) -> d
 
 async def handle_skip(state: InterviewState, config: RunnableConfig) -> dict:
     """Record that the candidate skipped this question."""
-    skip_msg = _msg("candidate", "[Skipped]", skipped=True)
+    active = get_active_question(state)
+    skip_msg = _msg(
+        "candidate",
+        "[Skipped]",
+        skipped=True,
+        question_id=active["question_id"] if active else None,
+        parent_question_id=active["parent_question_id"] if active else None,
+    )
     return {
         "conversation": [skip_msg],
     }
@@ -490,12 +555,20 @@ async def handle_end(state: InterviewState, config: RunnableConfig) -> dict:
 
 async def handle_error(state: InterviewState, config: RunnableConfig) -> dict:
     """Capture an error and set error response."""
-    error_msg = state.get("error", "An unknown error occurred.")
+    rejection = command_error(state, state.get("action"), state.get("current_answer"))
+    error_msg = state.get("error") or (
+        rejection.detail if rejection else "An unknown error occurred."
+    )
     return {
         "response_type": "error",
         "response_content": error_msg,
         "response_data": {"error": error_msg},
     }
+
+
+async def resume_question(state: InterviewState, config: RunnableConfig) -> dict:
+    """Return the active prompt without regenerating or appending conversation."""
+    return active_question_response(state)
 
 
 # ═══════════════════════════════════════════════
