@@ -33,6 +33,14 @@ def command_error(
         return CommandError("Session is not accepting answers or skips", "not_asking")
     if phase == "asking" and action != "end" and get_active_question(state) is None:
         return CommandError("No active question is available", "missing_question", 409)
+    if action == "answer" and (state.get("current_evaluation") or {}).get(
+        "follow_up_failure"
+    ):
+        return CommandError(
+            "This answer is already evaluated, but its follow-up is unavailable. Skip or end.",
+            "follow_up_unavailable",
+            409,
+        )
     if action == "answer" and (not isinstance(answer, str) or not answer.strip()):
         return CommandError("Answer cannot be empty", "invalid_answer")
     return None

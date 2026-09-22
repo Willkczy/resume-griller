@@ -1,4 +1,4 @@
-"""M2 model-boundary contracts; runtime wiring follows in stage 2.
+"""M2 runtime model-boundary contracts.
 
 These are internal contracts, not the active HTTP/WS response schemas.
 Only the application may classify provider failures and unsupported modes.

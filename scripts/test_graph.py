@@ -44,11 +44,7 @@ def create_mock_services():
     # Mock LLM — returns canned responses
     mock_llm = AsyncMock()
     mock_llm.generate = AsyncMock(
-        return_value=(
-            "1. Tell me about the architecture of your main project?\n"
-            "2. What debugging tools did you use for production issues?\n"
-            "3. How did you optimize the database queries?\n"
-        )
+        return_value='{"questions": ["Tell me about the architecture of your main project?", "What debugging tools did you use for production issues?", "How did you optimize the database queries?"]}'
     )
 
     # Mock grilling engine — returns a realistic evaluation
@@ -86,7 +82,6 @@ def create_mock_services():
     mock_grilling.generate_follow_up = AsyncMock(
         return_value="You mentioned improving performance. What specific metrics did you measure, and what were the before/after numbers?"
     )
-    mock_grilling.check_resume_consistency = AsyncMock(return_value=(True, []))
 
     return GraphServices(
         llm=mock_llm,

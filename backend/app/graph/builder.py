@@ -53,6 +53,8 @@ The compiled graph is what you .ainvoke() from route handlers.
                        END
 
    "error" → handle_error → END
+   Unavailable question generation/evaluation → END with explicit error envelope.
+   Failed follow-up generation → END without adding an interviewer turn.
 """
 
 from langgraph.graph import END, StateGraph
@@ -104,7 +106,11 @@ def build_interview_graph() -> StateGraph:
 
     # --- "start" flow ---
     # generate_questions → ask_question → END
-    graph.add_edge("generate_questions", "ask_question")
+    graph.add_conditional_edges(
+        "generate_questions",
+        edges.route_after_generation,
+        {"ready": "ask_question", "unavailable": END},
+    )
     graph.add_edge("ask_question", END)
 
     # --- "answer" flow ---
@@ -113,6 +119,7 @@ def build_interview_graph() -> StateGraph:
         "evaluate_answer",
         edges.route_after_evaluate,
         {
+            "unavailable": END,
             "grill": "generate_follow_up",
             "advance": "advance_question",
             "done": "complete_interview",

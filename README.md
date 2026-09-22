@@ -88,8 +88,8 @@ At minimum, configure the provider selected by `LLM_PROVIDER`. Resume parsing us
 Groq, so `GROQ_API_KEY` is required for new uploads.
 
 `LLM_MODE=local` is present in settings but is not connected to the active service
-factory. Use the API or Custom/Hybrid interview paths described by the application;
-do not rely on automatic local LoRA loading.
+factory. Use API interview mode for scored interviews; Custom/Hybrid compact
+evaluation currently reports unsupported. Do not rely on automatic local LoRA loading.
 
 ```bash
 cd frontend
@@ -177,6 +177,21 @@ availability; video links fall back to text unless STT and TTS are available.
 The retained voice adapters are experimental batch processing, not verified live
 voice support. ElevenLabs is not in the root dependency set. See the
 [voice decision](docs/decisions/0001-text-only-baseline.md) for limits.
+
+## Model output boundary
+
+Interview questions and evaluations must satisfy runtime contracts. Malformed or
+out-of-range evaluations do not become fallback scores; short answers reach the
+model instead of receiving a length-based penalty. The compact Custom/Hybrid
+evaluator reports unsupported until it can supply honest dimension judgments.
+
+Unavailable evaluation retains the active question and uses the existing error
+envelope without a score. Insufficient evidence has its own outcome/code. Failed
+question generation leaves the session pending; failed follow-up generation keeps
+the accepted answer and requires skip/end rather than scoring it twice. Dedicated
+outcome UI, metadata/timings and deterministic CI remain later M2 stages. These
+checks establish output validity, not judgment accuracy or retry safety. See the
+[contract decision and reading guide](docs/decisions/0003-model-output-contracts.md).
 
 ## Data and compatibility
 

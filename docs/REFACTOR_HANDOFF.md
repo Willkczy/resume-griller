@@ -32,7 +32,7 @@ real-user processing remain blocked by M9; resolve retained PR data before relea
 |---|---|---|---|
 | M0 | Local baseline accepted for M1; host cleanup deferred by owner | Pending / not assessed | Five GitHub PR refs still retain data; release/distribution issue remains open |
 | M1 | Engineering complete; committed locally | Pending / not assessed | 73 tests pass; real graph/engine integration, lifecycle parity and active-turn evidence below |
-| M2 | Authorized; stage 1 complete, stopped for owner review | Pending / not assessed | Contracts tested; engine wiring and CI remain open |
+| M2 | Stages 1–2 complete; stopped for owner review | Pending / not assessed | Runtime contracts enforced; outcome UI, metadata and CI remain open |
 | M3 | Not started | Not recorded | No human-reviewed benchmark yet |
 | M4 | Not started | Not recorded | No evaluation ledger/report yet |
 | M5 | Not started | Not recorded | Retry/restart guarantees not established |
@@ -41,13 +41,13 @@ real-user processing remain blocked by M9; resolve retained PR data before relea
 | M8 | Not selected | Not recorded | Optional; depends on M7 |
 | M9 | Not started | Not recorded | Real-user/public-beta gate remains closed |
 
-## Current scope: M2 stage 1 complete; stop for review
+## Current scope: M2 stage 2 complete; stop for review
 
-M1 engineering is complete. The owner authorized M2 with a corresponding local
-commit and a stop between each stage. Stage 1 adds tested internal contracts and
-reproduces existing engine defects; it does not wire contracts into live interviews.
-See the latest stage record and decision 0003. Resume with stage 2 only after the
-owner continues the staged workflow. Pending learning remains separately recorded.
+The owner authorized M2 with a local commit and a stop between each stage. Stages
+1–2 define and enforce runtime model contracts, remove fabricated fallback scores,
+and halt graph progression on unavailable evaluations. Full public outcomes/UI,
+provider metadata and CI remain open. See the latest stage record and decision 0003.
+Resume with stage 3 after the owner continues. Learning remains separately pending.
 
 Deferred M0 item: GitHub PR refs 1–5 and the draft Support request remain documented
 in HISTORY_REMEDIATION and GITHUB_HISTORY_CLEANUP_REQUEST. The owner chose to defer
@@ -55,8 +55,9 @@ that work; do not treat it as an implementation dependency for M1 or as resolved
 
 ## Remaining engineering limitations
 
-- Standard evaluation parsing accepts missing/unbounded output; custom scores are
-  scalar-derived. Structured validation/failure handling belongs to M2.
+- Model outputs now have runtime validation and explicit non-scored outcomes.
+  Dedicated outcome UI/public union, provider metadata and deterministic CI remain M2.
+  Custom/Hybrid compact evaluation is explicitly unsupported, not scalar-derived.
 - Evaluation history is cleared on advance; reports remain count-based (M4).
 - Sequential validation is not atomic concurrency control or idempotency (M5).
 - Partial-node failures, full history/draft restoration and process-restart recovery
@@ -533,3 +534,65 @@ records superseded by this explicit owner request; no new push or deployment occ
   remove strict xfails as defects are repaired, eliminate scalar fabrication and
   heuristic failure scoring. Keep the intermediate commit runnable with explicit
   failure handling; full graph/API/UI integration is stage 3. M2 is not complete.
+
+
+## 2026-09-22 — M2 stage 2: enforce runtime model contracts
+
+- Owner requested continuation to stage 2, with a corresponding local commit and
+  review stop. Agent scope: engine/question enforcement, minimal graph compatibility,
+  synthetic regression coverage and documentation. Owner exercise: trace validated
+  model output through projection and routing; learning remains pending/not assessed.
+- Standard evaluation now validates complete JSON before constructing a scored
+  result. Removed missing-field defaults at the model boundary, exception/length
+  heuristic scores, compact scalar-to-seven-dimension expansion, and the unvalidated
+  second consistency call. Consistency is judged inside the validated response;
+  absent resume evidence is explicitly distinguished from contradiction in the prompt.
+- Custom/Hybrid session compact evaluation and its legacy helper methods report
+  unsupported with no score. API-mode adapters must satisfy the standard contract.
+  All interview, prepared Hybrid and standalone endpoint question outputs require
+  the exact requested number of valid strings; no padding, substring or punctuation
+  repair. Follow-up generation likewise validates output and has no silent fallback.
+- Minimal graph integration: non-scored outcomes retain the active question and
+  halt before follow-up policy, even at a zero cap/final question. Existing REST/WS
+  error envelopes expose safe, distinct codes without a success evaluation payload.
+  Failed startup stays pending. Failed follow-up keeps the accepted answer/evaluation
+  and records a failure; another answer is rejected with 409, while skip/end work.
+  This is a bounded guard, not concurrency, idempotency or restart recovery.
+- A non-scored answer is not appended as an accepted conversation answer; its text
+  remains in current graph state. A new explicit submission may succeed. Dedicated
+  UI, failure restoration on reconnect and full public outcome contracts remain
+  stage 3. Added only the optional valid tag to the existing frontend evaluation type.
+- Removed timestamp prompt entropy while changing question format. Changed prompt
+  identities: evaluation-v2, follow-up-generation-v2, question-generation-v2,
+  standalone-questions-v2 and hybrid-questions-v2; rubric identity is
+  question-aware-seven-dimension-v1. Schema remains model-output-v1; policy is
+  follow-up-v2 for the new outcome guard, with existing numeric thresholds unchanged.
+  Full metadata propagation and broader provider logging/timings remain stage 4.
+- Deterministic delta: all three stage 1 engine defects now pass as normal tests
+  (strict xfail markers removed). Expanded synthetic fixture revision:
+  model-output-cases-v2. Short answers now reach the mocked evaluator; invalid output,
+  provider failure, insufficient evidence and unsupported mode cannot become scores.
+  New graph tests cover failed startup/follow-up, REST/WS parity, no progression at
+  cap, valid low-score follow-up, exact question counts and stable prompts.
+  No human-reviewed benchmark or live model-quality delta is claimed.
+- Verification actually run:
+  - `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. .venv/bin/python -m pytest tests/
+    -p no:cacheprovider -q`: **174 passed**, five existing SWIG warnings, no xfails.
+  - `.venv/bin/ruff check backend rag/retriever.py tests scripts/test_graph.py
+    --config pyproject.toml`: passed; `.venv/bin/black --check backend
+    rag/retriever.py tests scripts/test_graph.py`: passed.
+  - Mocked graph smoke: `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=.
+    .venv/bin/python scripts/test_graph.py`: passed start/answer/follow-up/skip/end.
+  - Frontend `./node_modules/.bin/tsc --noEmit --incremental false` and
+    `npm run lint`: passed. Only an additive type declaration changed; production
+    build/browser tests were not rerun. No live LLM/STT/TTS/Chroma calls or runtime
+    data migrations/deletions. `git diff --check`: passed.
+- Initial integration run found ten policy test fixtures missing the new valid tag;
+  updated fixtures and reran the suite, without changing score thresholds.
+- Read [decision 0003](decisions/0003-model-output-contracts.md), then
+  `core/grilling_engine.py`, `graph/nodes.py`, `graph/edges.py` and
+  `tests/test_interview_flow.py`. Paths are under `backend/app/` unless prefixed tests.
+- Existing Jev planning edits and local settings remain outside this stage's commit.
+  No push/deployment. Exact next step: stop for owner review, then stage 3 public
+  outcome schemas/types and UI handling, including unavailable/insufficient outcomes,
+  draft treatment and reconnect visibility. M2 remains incomplete; do not start M3.

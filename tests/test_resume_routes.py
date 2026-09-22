@@ -1,3 +1,4 @@
+import json
 from io import BytesIO
 from unittest.mock import AsyncMock, Mock
 
@@ -102,9 +103,13 @@ async def test_generate_questions_and_parse_response():
     retriever.get_resume_summary.return_value = {"total_chunks": 1}
     retriever.build_prompt.return_value = "prompt"
     llm = AsyncMock()
-    llm.generate.return_value = (
-        "1. How did you design the service?\n"
-        "2. What measurable outcome did it achieve?"
+    llm.generate.return_value = json.dumps(
+        {
+            "questions": [
+                "How did you design the service?",
+                "What measurable outcome did it achieve?",
+            ]
+        }
     )
     request = GenerateQuestionsRequest(
         resume_id="resume-1",
@@ -115,3 +120,28 @@ async def test_generate_questions_and_parse_response():
     result = await resume.generate_questions("resume-1", request, retriever, llm)
     assert len(result.questions) == 2
     assert result.questions[0].type == QuestionType.TECHNICAL
+
+
+@pytest.mark.parametrize(
+    "output,code",
+    [
+        ('{"questions": []}', 502),
+        ('{"questions": [" "]}', 502),
+        ('{"questions": ["One?", "Two?"]}', 502),
+        ("1. An old numbered question?", 502),
+        (TimeoutError("synthetic sentinel"), 503),
+    ],
+)
+async def test_standalone_questions_validate_count_and_hide_failure_payload(
+    output, code
+):
+    retriever = Mock()
+    retriever.get_resume_summary.return_value = {"total_chunks": 1}
+    retriever.build_prompt.return_value = "synthetic prompt"
+    llm = AsyncMock()
+    llm.generate.side_effect = [output]
+    request = GenerateQuestionsRequest(resume_id="synthetic", num_questions=1)
+    with pytest.raises(HTTPException) as exc:
+        await resume.generate_questions("synthetic", request, retriever, llm)
+    assert exc.value.status_code == code
+    assert "sentinel" not in exc.value.detail

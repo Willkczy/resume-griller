@@ -53,6 +53,9 @@ def route_action(state: InterviewState) -> str:
 
 def route_after_evaluate(state: InterviewState) -> str:
     """Use the shared policy, then advance or finish the final main question."""
+    evaluation = state.get("current_evaluation") or {}
+    if evaluation.get("outcome") != "valid":
+        return "unavailable"
     if should_follow_up(
         state["current_evaluation"],
         state["current_follow_up_count"],
@@ -77,3 +80,8 @@ def route_after_advance(state: InterviewState) -> str:
     if state["current_question_index"] >= len(state["questions"]):
         return "done"
     return "more"
+
+
+def route_after_generation(state: InterviewState) -> str:
+    """Never present default questions or complete an empty failed session."""
+    return "ready" if state.get("status") == "asking" else "unavailable"

@@ -191,7 +191,7 @@ async def create_session(
 
     The graph generates questions from the resume and returns the first one.
     For "custom" model_type, Groq preprocesses the resume first, then the
-    Custom Model is used for evaluation during the interview.
+    compact evaluation reports unsupported until it meets the M2 contract.
     """
     # Verify resume exists
     full_resume_text = retriever.get_full_resume_text(request.resume_id)
@@ -215,10 +215,10 @@ async def create_session(
                 mode=request.mode,
                 num_questions=request.num_questions,
             )
-        except Exception as e:
+        except Exception:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Custom model preparation failed: {e}. Try 'api' model_type.",
+                detail="Custom model preparation failed. Try 'api' model_type.",
             )
 
     # Generate a session ID

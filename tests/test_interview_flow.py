@@ -1,5 +1,6 @@
 """Synthetic HTTP/WS integration cases with real graph and evaluation components."""
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -28,7 +29,9 @@ def interview(monkeypatch, tmp_path):
     )
     retriever = InterviewRetriever()
     llm = AsyncMock()
-    llm.generate.return_value = "1. How did you design the synthetic queue simulator?"
+    llm.generate.return_value = json.dumps(
+        {"questions": ["How did you design the synthetic queue simulator?"]}
+    )
     services = GraphServices(llm=llm, grilling_engine=GrillingEngine(llm))
     graph = build_interview_graph().compile(checkpointer=MemorySaver())
 
@@ -80,6 +83,13 @@ def model_evaluation(*, sufficient=True, follow_up=None):
 
     return json.dumps(
         {
+            "outcome": "valid",
+            "gap_details": (
+                {} if sufficient else {"too_generic": "No implementation detail"}
+            ),
+            "priority_gap": None if sufficient else "too_generic",
+            "missing_elements": [] if sufficient else ["Implementation detail"],
+            "strengths": ["Relevant answer"],
             "scores": dict.fromkeys(
                 [
                     "relevancy",
@@ -119,9 +129,8 @@ FOLLOW_UP_2 = "How did you test the chosen capacity under load?"
 
 def test_sufficient_first_answer_does_not_force_follow_up(interview):
     interview.llm.generate.side_effect = [
-        f"1. {QUESTION}",
+        json.dumps({"questions": [QUESTION]}),
         model_evaluation(),
-        '{"is_consistent": true}',
     ]
     started = start_interview(interview)
     session_id = started["metadata"]["session_id"]
@@ -133,9 +142,8 @@ def test_sufficient_first_answer_does_not_force_follow_up(interview):
 
 def test_repeated_follow_up_answers_target_presented_prompt(interview):
     interview.llm.generate.side_effect = [
-        f"1. {QUESTION}",
+        json.dumps({"questions": [QUESTION]}),
         model_evaluation(sufficient=False, follow_up=FOLLOW_UP_1),
-        '{"is_consistent": true}',
         model_evaluation(sufficient=False, follow_up=FOLLOW_UP_2),
         model_evaluation(),
     ]
@@ -168,9 +176,8 @@ def test_repeated_follow_up_answers_target_presented_prompt(interview):
 
 def test_rest_and_websocket_restore_active_follow_up(interview):
     interview.llm.generate.side_effect = [
-        f"1. {QUESTION}",
+        json.dumps({"questions": [QUESTION]}),
         model_evaluation(sufficient=False, follow_up=FOLLOW_UP_1),
-        '{"is_consistent": true}',
     ]
     session_id = start_interview(interview)["metadata"]["session_id"]
     answer = interview.client.post(
@@ -355,11 +362,9 @@ def test_provider_setup_failure_is_retryable_before_graph_write(interview, monke
 def test_ws_multiple_questions_advance_and_skip_follow_up(interview):
     second = "How did you measure the simulator's throughput?"
     interview.llm.generate.side_effect = [
-        f"1. {QUESTION}\n2. {second}",
+        json.dumps({"questions": [QUESTION, second]}),
         model_evaluation(),
-        '{"is_consistent": true}',
         model_evaluation(sufficient=False, follow_up=FOLLOW_UP_1),
-        '{"is_consistent": true}',
     ]
     session_id = start_interview(interview, num_questions=2)["metadata"]["session_id"]
     with interview.client.websocket_connect(f"/ws/interview/{session_id}") as ws:
@@ -418,7 +423,7 @@ def test_legacy_follow_up_recovery_never_guesses_main_prompt(interview, recovera
             interview.llm.generate.assert_not_awaited()
 
 
-def test_custom_compact_evaluator_receives_active_follow_up(interview):
+def test_custom_evaluation_is_explicitly_unsupported(interview):
     prepared = {"questions": [QUESTION], "resume_summary": "Synthetic queue project"}
     interview.services.grilling_engine = GrillingEngine(
         interview.llm, model_type="custom", prepared_context=prepared
@@ -426,24 +431,19 @@ def test_custom_compact_evaluator_receives_active_follow_up(interview):
     session_id = seed_session(
         interview, model_type="custom", prepared_context=prepared, num_questions=1
     )
-    interview.llm.generate.side_effect = [
-        '{"score": 0.5, "gap": "too_generic", "sufficient": false, "followup": "'
-        + FOLLOW_UP_1
-        + '"}',
-        '{"score": 0.9, "gap": "too_generic", "sufficient": true}',
-    ]
     with interview.client.websocket_connect(f"/ws/interview/{session_id}") as ws:
         ws.receive_json()
         ws.send_json({"type": "start"})
         assert ws.receive_json()["content"] == QUESTION
         ws.send_json({"type": "answer", "content": ANSWER})
-        assert ws.receive_json()["content"] == FOLLOW_UP_1
-        ws.send_json({"type": "answer", "content": ANSWER})
-        assert ws.receive_json()["type"] == "complete"
-    prompts = [call.kwargs["prompt"] for call in interview.llm.generate.await_args_list]
-    assert len(prompts) == 2
-    assert f"Q: {QUESTION}\n" in prompts[0]
-    assert f"Q: {FOLLOW_UP_1}\n" in prompts[1]
+        response = ws.receive_json()
+        assert response["type"] == "error"
+        assert response["data"]["error_code"] == "evaluation_unsupported_mode"
+    state = snapshot(interview, session_id)
+    assert state["status"] == "asking"
+    assert state["current_evaluation"]["outcome"] == "unsupported_mode"
+    assert "score" not in state["current_evaluation"]
+    interview.llm.generate.assert_not_awaited()
 
 
 def test_pending_ws_end_needs_no_provider(interview, monkeypatch):
@@ -458,3 +458,218 @@ def test_pending_ws_end_needs_no_provider(interview, monkeypatch):
         ws.send_json({"type": "end"})
         assert ws.receive_json()["data"]["summary"]["status"] == "cancelled"
     interview.llm.generate.assert_not_awaited()
+
+
+@pytest.mark.parametrize("transport", ["rest", "ws"])
+@pytest.mark.parametrize(
+    "output,outcome",
+    [
+        ("{}", "invalid_output"),
+        ('{"outcome":', "invalid_output"),
+        (TimeoutError("synthetic secret sentinel"), "provider_failure"),
+        (
+            json.dumps(
+                {
+                    "outcome": "insufficient_evidence",
+                    "reasoning": "Project unidentified",
+                    "missing_elements": ["Project identity"],
+                    "suggested_follow_up": None,
+                }
+            ),
+            "insufficient_evidence",
+        ),
+    ],
+)
+def test_unavailable_evaluation_never_advances_even_at_cap(
+    interview, transport, output, outcome
+):
+    session_id = start_interview(interview, max_follow_ups=0)["metadata"]["session_id"]
+    before = snapshot(interview, session_id)
+    interview.llm.generate.side_effect = [output]
+    if transport == "rest":
+        result = interview.client.post(
+            f"/api/v1/sessions/{session_id}/answer", json={"answer": ANSWER}
+        ).json()
+        data = result["metadata"]
+    else:
+        with interview.client.websocket_connect(f"/ws/interview/{session_id}") as ws:
+            ws.receive_json()
+            ws.send_json({"type": "answer", "content": ANSWER})
+            result = ws.receive_json()
+            data = result["data"]
+    assert result["type"] == "error"
+    assert data["error_code"] == f"evaluation_{outcome}"
+    assert not result.get("evaluation")
+    assert "sentinel" not in json.dumps(result)
+    after = snapshot(interview, session_id)
+    assert after["status"] == "asking"
+    assert after["active_question"] == before["active_question"]
+    assert after["conversation"] == before["conversation"]
+    assert after["current_question_index"] == before["current_question_index"]
+    assert after["current_follow_up_count"] == 0
+    assert after["current_evaluation"]["outcome"] == outcome
+    assert "score" not in after["current_evaluation"]
+    # Explicit skip still works without any provider call.
+    calls = interview.llm.generate.await_count
+    response = interview.client.post(f"/api/v1/sessions/{session_id}/skip").json()
+    assert response["type"] == "complete"
+    assert interview.llm.generate.await_count == calls
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        "1. A numbered question is no longer the model contract?",
+        '{"questions": [" "]}',
+        '{"questions": []}',
+        '{"questions": ["One?", "Two?"]}',
+        TimeoutError("synthetic secret sentinel"),
+    ],
+)
+def test_failed_question_generation_stays_pending_without_defaults(interview, output):
+    interview.llm.generate.side_effect = [output]
+    result = start_interview(interview)
+    assert result["type"] == "error"
+    assert "sentinel" not in json.dumps(result)
+    state = snapshot(interview, result["metadata"]["session_id"])
+    assert state["status"] == "pending"
+    assert state["questions"] == []
+    assert state["active_question"] is None
+    assert state["conversation"] == []
+
+
+@pytest.mark.parametrize("questions", [[], [""], [QUESTION, QUESTION], [7]])
+def test_prepared_questions_cannot_bypass_validation(interview, questions):
+    session_id = seed_session(
+        interview,
+        model_type="custom",
+        num_questions=1,
+        prepared_context={"questions": questions},
+    )
+    with interview.client.websocket_connect(f"/ws/interview/{session_id}") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "start"})
+        result = ws.receive_json()
+        assert result["type"] == "error"
+        assert result["data"]["error_code"] == "question_generation_invalid_output"
+    assert snapshot(interview, session_id)["status"] == "pending"
+    interview.llm.generate.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "output",
+    ['{"question":" "}', "An unstructured question?", TimeoutError("sentinel")],
+)
+def test_failed_follow_up_does_not_create_turn_or_duplicate_answer(interview, output):
+    interview.llm.generate.side_effect = [
+        json.dumps({"questions": [QUESTION]}),
+        model_evaluation(sufficient=False),
+        output,
+    ]
+    session_id = start_interview(interview)["metadata"]["session_id"]
+    result = interview.client.post(
+        f"/api/v1/sessions/{session_id}/answer", json={"answer": ANSWER}
+    ).json()
+    assert result["type"] == "error"
+    state = snapshot(interview, session_id)
+    assert state["status"] == "asking"
+    assert state["current_follow_up_count"] == 0
+    assert state["active_question"]["prompt"] == QUESTION
+    assert state["current_evaluation"]["outcome"] == "valid"
+    assert state["current_evaluation"]["follow_up_failure"]["outcome"] in {
+        "invalid_output",
+        "provider_failure",
+    }
+    assert len([m for m in state["conversation"] if m["role"] == "candidate"]) == 1
+    calls = interview.llm.generate.await_count
+    repeated = interview.client.post(
+        f"/api/v1/sessions/{session_id}/answer", json={"answer": ANSWER}
+    )
+    assert repeated.status_code == 409
+    assert snapshot(interview, session_id) == state
+    assert interview.llm.generate.await_count == calls
+    with interview.client.websocket_connect(f"/ws/interview/{session_id}") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "start"})
+        assert ws.receive_json()["content"] == QUESTION
+        ws.send_json({"type": "answer", "content": ANSWER})
+        assert ws.receive_json()["data"]["status_code"] == 409
+        ws.send_json({"type": "skip"})
+        assert ws.receive_json()["type"] == "complete"
+    assert interview.llm.generate.await_count == calls
+
+
+def test_short_correct_answer_is_evaluated_without_length_heuristic(interview):
+    interview.llm.generate.side_effect = [
+        json.dumps({"questions": [QUESTION]}),
+        model_evaluation(),
+    ]
+    session_id = start_interview(interview)["metadata"]["session_id"]
+    result = interview.client.post(
+        f"/api/v1/sessions/{session_id}/answer", json={"answer": "FIFO."}
+    ).json()
+    assert result["type"] == "complete"
+    assert interview.llm.generate.await_count == 2
+    assert "ANSWER: FIFO." in interview.llm.generate.await_args.kwargs["prompt"]
+
+
+def test_valid_generated_followup_and_valid_low_score(interview):
+    interview.llm.generate.side_effect = [
+        json.dumps({"questions": [QUESTION]}),
+        model_evaluation(sufficient=False),
+        json.dumps({"question": FOLLOW_UP_1}),
+    ]
+    session_id = start_interview(interview)["metadata"]["session_id"]
+    result = interview.client.post(
+        f"/api/v1/sessions/{session_id}/answer", json={"answer": ANSWER}
+    ).json()
+    assert result["type"] == "follow_up"
+    assert result["content"] == FOLLOW_UP_1
+    assert result["evaluation"]["score"] == pytest.approx(0.5)
+    assert result["evaluation"]["outcome"] == "valid"
+
+
+def test_explicit_submission_after_invalid_evaluation_can_succeed(interview):
+    interview.llm.generate.side_effect = [
+        json.dumps({"questions": [QUESTION]}),
+        "{}",
+        model_evaluation(),
+    ]
+    session_id = start_interview(interview)["metadata"]["session_id"]
+    url = f"/api/v1/sessions/{session_id}/answer"
+    assert interview.client.post(url, json={"answer": ANSWER}).json()["type"] == "error"
+    assert (
+        interview.client.post(url, json={"answer": ANSWER}).json()["type"] == "complete"
+    )
+    assert (
+        len(
+            [
+                m
+                for m in snapshot(interview, session_id)["conversation"]
+                if m["role"] == "candidate"
+            ]
+        )
+        == 1
+    )
+
+
+def test_pending_generation_can_be_explicitly_started_again(interview):
+    interview.llm.generate.side_effect = ["{}", json.dumps({"questions": [QUESTION]})]
+    failed = start_interview(interview)
+    session_id = failed["metadata"]["session_id"]
+    assert failed["type"] == "error"
+    with interview.client.websocket_connect(f"/ws/interview/{session_id}") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "start"})
+        response = ws.receive_json()
+        assert response["type"] == "question"
+        assert "error" not in response
+    assert snapshot(interview, session_id)["status"] == "asking"
+
+
+def test_question_prompts_are_stable_for_identical_input(interview):
+    start_interview(interview)
+    start_interview(interview)
+    first, second = interview.llm.generate.await_args_list
+    assert first.kwargs == second.kwargs
+    assert "Generation ID" not in first.kwargs["prompt"]

@@ -4,7 +4,7 @@ Supports Claude, OpenAI, Gemini, Groq, Custom (vLLM), and Hybrid mode.
 
 Hybrid Mode:
 - Uses Groq for preprocessing (summarization, question generation)
-- Uses Custom Model for interview execution (evaluation, follow-ups)
+- Custom compact evaluation/follow-up helpers report unsupported under M2 contracts
 """
 
 import asyncio
@@ -12,6 +12,11 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 
 from backend.app.config import settings
+from backend.app.models.model_outputs import (
+    QuestionBatch,
+    UnsupportedMode,
+    parse_questions,
+)
 
 
 class BaseLLMService(ABC):
@@ -507,7 +512,8 @@ Requirements:
 3. Each question should probe for depth and specifics
 4. Questions should be challenging but fair
 
-Return ONLY the questions, numbered 1 to {num_questions}:"""
+Question prompt version: hybrid-questions-v2.
+Return ONLY JSON: {{"questions": ["question text", "another question"]}}"""
 
         questions_response = await self.preprocessor.generate(
             prompt=questions_prompt,
@@ -572,60 +578,8 @@ List 3-5 bullet points of relevant facts the candidate should mention. Be concis
         answer: str,
         conversation_history: list[dict] = None,
     ) -> dict:
-        """
-        Phase 2: Use Custom Model to evaluate an answer.
-
-        Uses the pre-prepared compact context.
-        """
-        context = self._prepared_contexts.get(session_id, {})
-
-        # Get the relevant context for this question
-        question_context = ""
-        if context and question_index < len(context.get("question_contexts", [])):
-            question_context = context["question_contexts"][question_index]
-
-        # Build conversation context (last 2 exchanges only)
-        conv_text = ""
-        if conversation_history:
-            recent = conversation_history[-4:]  # Last 2 Q&A pairs
-            conv_parts = []
-            for msg in recent:
-                role = "Q" if msg.get("role") == "interviewer" else "A"
-                content = msg.get("content", "")[:100]
-                conv_parts.append(f"{role}: {content}")
-            if conv_parts:
-                conv_text = "\nRecent: " + " | ".join(conv_parts)
-
-        # Compact evaluation prompt for Custom Model
-        eval_prompt = f"""Rate this answer (0.0-1.0).
-
-Q: {question[:150]}
-A: {answer[:400]}
-
-Expected: {question_context[:200]}
-{conv_text}
-
-Score: specificity, metrics, depth, relevance
-JSON only: {{"score": 0.X, "gap": "type", "followup": "question if needed"}}
-Gaps: no_specific_example, no_metrics, too_generic, unclear_role, no_outcome"""
-
-        try:
-            response = await self.interviewer.generate(
-                prompt=eval_prompt,
-                system_prompt=None,
-                max_tokens=200,
-                temperature=0.2,
-            )
-
-            return self._parse_evaluation(response)
-
-        except Exception as e:
-            print(f"[HybridModel] Evaluation error: {e}")
-            return {
-                "score": 0.5,
-                "gap": "no_specific_example",
-                "followup": "Could you provide more specific details?",
-            }
+        """Legacy compact evaluation is explicitly unavailable under M2 contracts."""
+        return UnsupportedMode().model_dump(mode="json")
 
     async def generate_followup(
         self,
@@ -634,59 +588,9 @@ Gaps: no_specific_example, no_metrics, too_generic, unclear_role, no_outcome"""
         answer: str,
         gap_type: str,
         conversation_history: list[dict] = None,
-    ) -> str:
-        """
-        Phase 2: Use Custom Model to generate a follow-up question.
-        """
-        context = self._prepared_contexts.get(session_id, {})
-        resume_summary = context.get("resume_summary", "")[:200]
-
-        # Build conversation context
-        conv_text = ""
-        if conversation_history:
-            recent_answers = [
-                msg.get("content", "")[:80]
-                for msg in conversation_history[-4:]
-                if msg.get("role") == "candidate"
-            ]
-            if recent_answers:
-                conv_text = f"\nPrevious answers: {' | '.join(recent_answers)}"
-
-        # Compact follow-up prompt
-        followup_prompt = f"""Generate 1 follow-up question.
-
-Q: {question[:120]}
-A: {answer[:200]}
-Gap: {gap_type.replace('_', ' ')}
-Context: {resume_summary[:150]}
-{conv_text}
-
-Follow-up:"""
-
-        try:
-            response = await self.interviewer.generate(
-                prompt=followup_prompt,
-                system_prompt=None,
-                max_tokens=100,
-                temperature=0.7,
-            )
-
-            followup = response.strip()
-            if not followup.endswith("?"):
-                followup += "?"
-            return followup
-
-        except Exception as e:
-            print(f"[HybridModel] Follow-up generation error: {e}")
-            # Fallback templates
-            templates = {
-                "no_specific_example": "Can you give me a specific example from your experience?",
-                "no_metrics": "What were the measurable results or impact?",
-                "too_generic": "Can you be more specific about what YOU did?",
-                "unclear_role": "What was your personal contribution to this?",
-                "no_outcome": "What was the final outcome or result?",
-            }
-            return templates.get(gap_type, "Could you elaborate on that?")
+    ) -> dict:
+        """No follow-up judgment is manufactured for an unsupported evaluator."""
+        return UnsupportedMode().model_dump(mode="json")
 
     async def generate(
         self,
@@ -732,54 +636,11 @@ Follow-up:"""
                 yield chunk
 
     def _parse_questions(self, response: str, expected_count: int) -> list[str]:
-        """Parse questions from LLM response."""
-        import re
-
-        questions = []
-        lines = response.strip().split("\n")
-
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-
-            cleaned = re.sub(r"^[\d]+[.)\-:]\s*", "", line)
-            cleaned = re.sub(r"^\*+\s*", "", cleaned)
-            cleaned = re.sub(
-                r"^Question\s*\d*[.:]\s*", "", cleaned, flags=re.IGNORECASE
-            )
-            cleaned = cleaned.strip()
-
-            if cleaned and len(cleaned) > 20:
-                if not cleaned.endswith("?"):
-                    cleaned += "?"
-                questions.append(cleaned)
-
-        return questions[:expected_count]
-
-    def _parse_evaluation(self, response: str) -> dict:
-        """Parse evaluation response from Custom Model."""
-        import json
-        import re
-
-        try:
-            # Try to find JSON in response
-            json_match = re.search(r"\{[^}]+\}", response, re.DOTALL)
-            if json_match:
-                data = json.loads(json_match.group())
-                return {
-                    "score": float(data.get("score", 0.5)),
-                    "gap": data.get("gap", "no_specific_example"),
-                    "followup": data.get("followup", ""),
-                }
-        except Exception as e:
-            print(f"[HybridModel] Parse error: {e}")
-
-        return {
-            "score": 0.5,
-            "gap": "no_specific_example",
-            "followup": "",
-        }
+        """Apply the same question contract used by the graph."""
+        result = parse_questions(response, expected_count=expected_count)
+        if not isinstance(result, QuestionBatch):
+            raise ValueError("Invalid prepared question output")
+        return result.questions
 
 
 class LLMServiceFactory:

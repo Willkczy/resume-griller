@@ -1,4 +1,4 @@
-"""Synthetic contract examples: model-output-cases-v1; no external calls."""
+"""Synthetic contract examples: model-output-cases-v2; no external calls."""
 
 import json
 from unittest.mock import AsyncMock
@@ -184,25 +184,19 @@ def test_invalid_followups(response):
     assert isinstance(parse_follow_up(response), InvalidOutput)
 
 
-# Stage 1 intentionally records live engine defects. Stage 2 must remove these
-# markers and adapt assertions to the wired contracts; strict XPASS forces review.
-@pytest.mark.xfail(strict=True, reason="M2 stage 2: engine defaults missing scores")
+# These production defects were strict expected failures in stage 1.
 def test_engine_rejects_empty_evaluation():
     result = GrillingEngine(AsyncMock())._parse_llm_evaluation("{}", 0)
     assert isinstance(result, InvalidOutput)
 
 
-@pytest.mark.xfail(strict=True, reason="M2 stage 2: engine accepts unbounded scores")
 def test_engine_rejects_out_of_range_evaluation(valid):
     valid["scores"] = dict.fromkeys(valid["scores"], 100)
     result = GrillingEngine(AsyncMock())._parse_llm_evaluation(json.dumps(valid), 0)
     assert isinstance(result, InvalidOutput)
 
 
-@pytest.mark.xfail(
-    strict=True, reason="M2 stage 2: provider failure becomes heuristic score"
-)
-async def test_engine_preserves_provider_failure():
+async def test_engine_preserves_provider_failure(capsys):
     llm = AsyncMock()
     llm.generate.side_effect = TimeoutError("synthetic timeout")
     result = await GrillingEngine(llm).evaluate_answer(
@@ -210,3 +204,4 @@ async def test_engine_preserves_provider_failure():
         "I built a synthetic bounded queue and measured latency under fixed load.",
     )
     assert isinstance(result, ProviderFailure)
+    assert "synthetic timeout" not in capsys.readouterr().out

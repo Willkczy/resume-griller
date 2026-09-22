@@ -1,3 +1,4 @@
+import json
 from unittest.mock import AsyncMock
 
 import pytest
@@ -54,15 +55,18 @@ def evaluation(*, sufficient: bool, with_gap: bool) -> AnswerEvaluation:
 @pytest.fixture
 def services() -> GraphServices:
     llm = AsyncMock()
-    llm.generate.return_value = (
-        "1. How did you design the payment service?\n"
-        "2. How did you debug the production outage?\n"
-        "3. What measurable result did your migration achieve?"
+    llm.generate.return_value = json.dumps(
+        {
+            "questions": [
+                "How did you design the payment service?",
+                "How did you debug the production outage?",
+                "What measurable result did your migration achieve?",
+            ]
+        }
     )
     grilling = AsyncMock()
     grilling.evaluate_answer.return_value = evaluation(sufficient=False, with_gap=True)
     grilling.generate_follow_up.return_value = "What measurable result did you achieve?"
-    grilling.check_resume_consistency.return_value = (True, [])
     return GraphServices(llm=llm, grilling_engine=grilling)
 
 
@@ -119,6 +123,7 @@ async def test_complete_graph_flow_with_follow_up_skip_and_end(services):
 
 @pytest.mark.asyncio
 async def test_last_question_completes_without_follow_up(services):
+    services.llm.generate.return_value = json.dumps({"questions": ["Why a queue?"]})
     graph = build_interview_graph().compile(checkpointer=MemorySaver())
     initial = create_initial_state(
         session_id="one-question",
@@ -176,7 +181,11 @@ def test_routes_and_public_state_helpers():
     assert (
         route_after_evaluate(
             {
-                "current_evaluation": {"is_sufficient": True, "gap_analysis": {}},
+                "current_evaluation": {
+                    "outcome": "valid",
+                    "is_sufficient": True,
+                    "gap_analysis": {},
+                },
                 "current_follow_up_count": 0,
                 "max_follow_ups": 0,
                 "current_question_index": 0,

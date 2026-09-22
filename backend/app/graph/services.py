@@ -70,9 +70,9 @@ class GraphServices:
         """
         Create services for Custom/Hybrid mode.
 
-        - hybrid_service.interviewer (Custom Model) is used for evaluation
-        - GrillingEngine gets model_type="custom" for compact prompts
-        - prepared_context from Groq preprocessing is passed to GrillingEngine
+        - Retains the existing provider/preprocessing wiring for compatibility.
+        - GrillingEngine reports compact evaluation unsupported under M2 contracts.
+        - Prepared questions are independently validated by the graph.
         """
         hybrid = LLMServiceFactory.get_hybrid_service()
         return cls(

@@ -25,6 +25,7 @@ from backend.app.graph.edges import route_after_evaluate
 )
 def test_engine_and_graph_use_one_policy(score, sufficient, gaps, count, cap, expected):
     evaluation = {
+        "outcome": "valid",
         "score": score,
         "is_sufficient": sufficient,
         "gap_analysis": {"detected_gaps": gaps},

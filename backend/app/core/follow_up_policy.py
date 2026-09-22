@@ -6,7 +6,7 @@ These are the existing engine thresholds, not calibrated model-quality claims.
 from collections.abc import Mapping
 from typing import Any
 
-POLICY_VERSION = "follow-up-v1"
+POLICY_VERSION = "follow-up-v2"
 SUFFICIENT_SCORE_THRESHOLD = 0.58
 HIGH_SCORE_THRESHOLD = 0.72
 SIGNIFICANT_GAPS = frozenset(
@@ -24,6 +24,8 @@ def should_follow_up(
     evaluation: Mapping[str, Any], follow_up_count: int, max_follow_ups: int
 ) -> bool:
     """Apply the cap first, then sufficiency, score and gap rules without side effects."""
+    if evaluation.get("outcome") != "valid":
+        return False
     if follow_up_count >= max_follow_ups:
         return False
     score = evaluation["score"]

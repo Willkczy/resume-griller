@@ -1,13 +1,13 @@
 # 0003 — Explicit model output contracts
 
-Date: 2026-09-22. Status: M2 stage 1 implemented; runtime integration pending.
+Date: 2026-09-22. Status: stages 1–2 implemented; dedicated outcome UI and metadata pending.
 
 ## Why
 
-A syntactically valid JSON object is not necessarily an evaluation. The current
-engine accepts `{}` as 0.425, accepts dimension scores of 100, and converts a
-provider timeout into a heuristic judgment. Stage 1 records these defects without
-claiming to repair production behavior.
+A syntactically valid JSON object is not necessarily an evaluation. Before M2, the
+engine accepted `{}` as 0.425, accepted dimension scores of 100, and converted a
+provider timeout into a heuristic judgment. Stage 1 reproduced these defects;
+stage 2 enforces the contracts and removes those fallback scores.
 
 ## Contract decisions
 
@@ -31,14 +31,15 @@ cannot claim that an infrastructure error occurred.
 
 The initial scored contract preserves the existing seven explicit dimensions to
 bound the migration. It does not endorse their calibration or permit constructing
-them from a scalar. Stage 2 must either obtain real dimension judgments in compact
-modes or explicitly report unsupported evaluation. Rubric/prompt revisions and their
-identities belong to the later wiring/versioning stages; M3 tests judgment quality.
+them from a scalar. Stage 2 explicitly reports compact evaluation as unsupported.
+Prompt/rubric identities are defined beside the changed prompts; full execution
+metadata propagation belongs to stage 4. M3 tests judgment quality.
 
 Parsing accepts a complete JSON document, without extracting a convenient substring
 or repairing markdown. Duplicate object keys are rejected rather than overwritten.
 Invalid output retains a safe code, never the original response or validation error
-text. This does not fix existing engine exception logging, which remains later M2 work.
+text. Stage 2 removes engine exception/payload logging. Broader provider-adapter
+logging and metadata/timing work remain stage 4.
 
 Questions use an exact requested count of nonblank strings (1–20), with duplicate
 questions rejected after trimming/case folding. Follow-ups require one nonblank
@@ -47,7 +48,7 @@ No fallback question is silently inserted by these parsers.
 
 ## Staged rollout and behavior boundary
 
-1. This commit: contracts, synthetic examples and strict expected-failure engine tests.
+1. Stage 1: contracts, synthetic examples and strict expected-failure engine tests.
 2. Wire engine/question outputs; eliminate fallback scoring and scalar fabrication.
 3. Integrate explicit outcomes into graph/API/UI, synchronizing public types.
    Unavailable evaluation must show no score and must not trigger score-based
@@ -68,8 +69,56 @@ wrong types, insufficient evidence, and provider failure. Then trace
 Explain why 0 is a legitimate score while a timeout has none. Change a synthetic
 example locally and predict the outcome before running the test.
 
-The three strict `xfail` tests are tracked production defects, not successful fixes.
-Run with `--runxfail -k test_engine_` to see them fail directly. Stage 2 must remove
-those markers as each defect is fixed. The examples are synthetic contract fixtures
-(`model-output-cases-v1`), not human-labeled benchmark evidence. Owner understanding
-remains pending, independently of test results.
+Stage 1 committed three strict `xfail` tests and verified they failed directly with
+`--runxfail -k test_engine_`. Stage 2 removes those markers: all three now pass.
+The expanded examples are synthetic contract fixtures (`model-output-cases-v2`),
+not human-labeled benchmark evidence. Owner understanding remains pending,
+independently of test results.
+
+
+## Stage 2 runtime decisions and reading path
+
+1. `GrillingEngine.evaluate_answer` calls the model even for a short answer, then
+   `_parse_llm_evaluation` validates the complete response. Only a `ScoredEvaluation`
+   becomes the compatibility `AnswerEvaluation` used by the graph. Existing weights
+   remain unchanged and uncalibrated. No substring repair, scalar expansion or
+   length/exception heuristic remains.
+2. Resume consistency is part of that validated judgment. The unvalidated second
+   call and its mutation of the evaluation are removed. The prompt distinguishes
+   missing resume evidence from contradiction; benchmark evidence for this instruction
+   is not yet available. Context still has an explicit existing truncation limit.
+3. Graph `evaluate_answer` stores a non-scored outcome without appending an accepted
+   candidate answer, retains the active question, and emits the existing error
+   envelope. `route_after_evaluate` checks outcome before applying follow-up caps:
+   a failed evaluation cannot complete the last question even at a zero cap.
+4. Non-scored outcomes allow read/resume, a new explicit answer submission, skip or
+   end. Insufficient evidence gets a distinct message/code but uses the existing
+   error envelope until stage 3. An explicit submission is not an automatic retry
+   or an idempotency guarantee. The current answer remains in checkpoint state;
+   full draft/history restoration is not implemented here.
+5. If evaluation succeeds but follow-up generation fails, the accepted answer and
+   evaluation remain checkpointed. No interviewer turn or follow-up count is added.
+   A recorded `follow_up_failure` prevents another answer to that same turn (409);
+   read/resume and skip/end remain allowed. This bounded guard is not M5 recovery.
+6. Questions (including prepared Hybrid questions and the standalone resume endpoint)
+   use the same complete-JSON, exact-count contract. No default-question padding or
+   punctuation repair remains. Failed startup stays pending without an active turn.
+   Graph failures retain the existing HTTP 200 error envelope; the standalone
+   endpoint returns 502 for invalid output and 503 for unavailable generation.
+7. Follow-ups use either the validated suggested question or a validated JSON
+   generation result. Compact helpers return unsupported without model calls.
+   API-mode provider adapters still must satisfy the same contract regardless of
+   configured provider; Custom/Hybrid session mode disables compact evaluation.
+
+Question timestamp entropy was removed while replacing the question prompt.
+Follow-up policy has a new identity for its outcome guard; thresholds are unchanged.
+Provider failure classification stores safe categories, not exception messages.
+Stage 4 still owns complete provider/model/usage/finish-reason/timing/version metadata.
+Stage 3 owns the explicit public outcome union and dedicated user experience; this
+stage only adds the valid tag to the existing TypeScript evaluation shape.
+
+Read `test_unavailable_evaluation_never_advances_even_at_cap` and
+`test_failed_follow_up_does_not_create_turn_or_duplicate_answer` in
+`tests/test_interview_flow.py`, then trace `nodes.evaluate_answer`,
+`edges.route_after_evaluate`, and `transitions.command_error`. Explain why a low
+valid score may trigger a follow-up while a timeout cannot trigger any progression.

@@ -109,7 +109,9 @@ handoff with engineering evidence and owner learning status separately.
 - Sequential command validation does not provide concurrency or idempotency guarantees.
 - Older checkpoints recover active prompts without migration; a missing follow-up
   prompt causes a 409 rejection rather than guessing the main question.
-- Empty/unbounded model evaluation output is not safely rejected.
+- Model questions/evaluations are runtime validated. Invalid output, provider failure,
+  insufficient evidence and unsupported compact evaluation have no score and do not
+  advance the interview. Dedicated outcome UI and provider metadata are still M2 work.
 - Full resume text is stored in state but evaluation prompts truncate context.
 - Voice is batch-based and disabled by default in settings and `.env.example`.
   The root dependency set lacks ElevenLabs; live voice remains experimental.

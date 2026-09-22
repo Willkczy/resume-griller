@@ -93,6 +93,8 @@ export interface InterviewResponse {
 }
 
 export interface AnswerEvaluation {
+  // New evaluations are explicitly valid; older checkpoints may omit this tag.
+  outcome?: 'valid';
   question_id?: string;
   parent_question_id?: string | null;
   answer_id?: string;
