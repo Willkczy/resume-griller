@@ -1,6 +1,6 @@
 # Refactor handoff
 
-Last updated: 2026-09-20.
+Last updated: 2026-09-22.
 
 ## Start here
 
@@ -32,7 +32,7 @@ real-user processing remain blocked by M9; resolve retained PR data before relea
 |---|---|---|---|
 | M0 | Local baseline accepted for M1; host cleanup deferred by owner | Pending / not assessed | Five GitHub PR refs still retain data; release/distribution issue remains open |
 | M1 | Engineering complete; committed locally | Pending / not assessed | 73 tests pass; real graph/engine integration, lifecycle parity and active-turn evidence below |
-| M2 | Technically eligible; not authorized or started | Pending / not assessed | Next: validated model outputs and deterministic CI |
+| M2 | Authorized; stage 1 complete, stopped for owner review | Pending / not assessed | Contracts tested; engine wiring and CI remain open |
 | M3 | Not started | Not recorded | No human-reviewed benchmark yet |
 | M4 | Not started | Not recorded | No evaluation ledger/report yet |
 | M5 | Not started | Not recorded | Retry/restart guarantees not established |
@@ -41,16 +41,13 @@ real-user processing remain blocked by M9; resolve retained PR data before relea
 | M8 | Not selected | Not recorded | Optional; depends on M7 |
 | M9 | Not started | Not recorded | Real-user/public-beta gate remains closed |
 
-## Current scope: M1 complete; stop at milestone boundary
+## Current scope: M2 stage 1 complete; stop for review
 
-Startup, active-turn scoring/reconnect, one pure follow-up policy and shared command
-validation are implemented and verified. See the final M1 entries and
-[command/turn decision](decisions/0002-interview-commands-and-turns.md).
-
-Exact next action: report M1 acceptance to the owner. Once M2 is explicitly authorized,
-start with failing tests for malformed/missing/out-of-range model evaluations, then
-introduce validated output contracts without silently treating parse failure as success.
-M2 has not started. Pending owner learning does not block technical eligibility.
+M1 engineering is complete. The owner authorized M2 with a corresponding local
+commit and a stop between each stage. Stage 1 adds tested internal contracts and
+reproduces existing engine defects; it does not wire contracts into live interviews.
+See the latest stage record and decision 0003. Resume with stage 2 only after the
+owner continues the staged workflow. Pending learning remains separately recorded.
 
 Deferred M0 item: GitHub PR refs 1–5 and the draft Support request remain documented
 in HISTORY_REMEDIATION and GITHUB_HISTORY_CLEANUP_REQUEST. The owner chose to defer
@@ -502,3 +499,37 @@ of this commit pass. No runtime payloads or local settings were staged.
 Owner learning remains pending/not assessed. M2 remains eligible but unauthorized.
 The earlier 'uncommitted'/'no commit authorized' statements are dated historical
 records superseded by this explicit owner request; no new push or deployment occurred.
+
+
+## 2026-09-22 — M2 stage 1: contracts and defect reproductions
+
+- Owner authorized M2 implementation with a local commit and a stop between each
+  stage. Agent scope: contracts, synthetic examples, tests and documentation.
+  Owner exercise: distinguish JSON validity from domain validity and trace one
+  parser; learning remains pending/not assessed.
+- Added internal `model-output-v1` contracts for valid evaluation, insufficient
+  evidence, invalid output, provider failure, unsupported mode, question batches
+  and follow-ups. Required fields, strict types, bounded finite numbers, gap
+  coherence and duplicate JSON keys are checked without retaining invalid payloads.
+- Moved the existing GapType enum to a shared model module; the engine imports it
+  and preserves its existing import surface. No runtime scoring or public API
+  behavior changed. Seven explicit dimensions remain provisional, not calibrated.
+- Synthetic fixtures: `model-output-cases-v1` in `tests/test_model_outputs.py`.
+  Focused run: 55 passed, 3 strict xfailed. Running with `--runxfail -k test_engine_`
+  reproduced all three defects: empty JSON -> 0.425; dimensions of 100 -> 100;
+  mocked timeout -> heuristic score 0.4. These are still live engine defects.
+- Verification: `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. .venv/bin/python -m pytest
+  tests/ -p no:cacheprovider -q`: 128 passed, 3 xfailed, five existing SWIG warnings.
+  `.venv/bin/ruff check backend rag/retriever.py tests --config pyproject.toml` and
+  `.venv/bin/black --check backend rag/retriever.py tests`: passed.
+  No frontend changes; frontend checks not rerun. No live provider calls, runtime
+  data changes or model-quality benchmark. Deterministic parser cases pass;
+  production defect delta remains unchanged until wiring in stage 2.
+- Reading guide and decisions: [0003](decisions/0003-model-output-contracts.md),
+  `backend/app/models/model_outputs.py`, `tests/test_model_outputs.py`.
+- Existing Jev planning edits and local settings are preserved outside this stage's
+  commit. No push or deployment. Stage 1 ends here per the requested review stop.
+- Exact next step after owner resumes: stage 2 engine/question contract enforcement,
+  remove strict xfails as defects are repaired, eliminate scalar fabrication and
+  heuristic failure scoring. Keep the intermediate commit runnable with explicit
+  failure handling; full graph/API/UI integration is stage 3. M2 is not complete.
