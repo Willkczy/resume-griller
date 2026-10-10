@@ -697,3 +697,33 @@ no self-referential commit identity is embedded here.
   logging. Stage 5 then establishes deterministic CI including frontend outcome fixtures.
   Do not start M3/Jev, M4 ledger or M5 recovery automatically. M0 host cleanup stays
   deferred and M9 real-user/public-beta gate remains closed.
+
+## 2026-10-10 — Publish implementation and refresh GitHub status
+
+- Owner authorized pushing the latest work and checking/updating GitHub project
+  status. Agent scope: remote comparison, normal branch push, documentation and
+  repository metadata. The stage 3 owner exercise remains pending/not assessed;
+  publication does not establish human understanding or complete M2.
+- Fetched remote refs and confirmed no newer commits on the active refactor branch.
+  Published the existing M0/M1 and M2 stages 1–3 implementation commits, together
+  with current-status corrections and the previously approved Jev comparison plan.
+  No history rewriting was needed. Machine-local settings remain excluded.
+- GitHub had no open PRs/issues, no workflows/releases and an empty About section.
+  Created [draft PR #6](https://github.com/Willkczy/resume-griller/pull/6) with current
+  scope, verification and unfinished milestones. Added a prototype/status description
+  and linked the current handoff from About. The default-branch README remains the
+  earlier version until this PR is reviewed and merged; historical merged PR records
+  were preserved.
+- Corrected current documentation to distinguish bounded latest feedback from the
+  missing durable ledger, describe received question-audio playback, and identify
+  M2 stage 4 metadata/timings as next. Kept the roadmap's initial baseline/table and
+  dated no-push records historical rather than rewriting them.
+- Checks: remote branch HEAD matched local HEAD after push; GitHub reported the PR
+  open, draft and mergeable. About changes were read back successfully. Changed
+  Markdown link targets/code fences and `git diff --check` passed. Source was unchanged
+  in this publication slice, so the stage 3 evidence above remains the latest code
+  verification: 211 backend tests, 10 frontend fixtures, formatting/lint/type/build
+  and synthetic browser checks. These are local checks, not GitHub Actions results.
+- Exact next implementation step remains M2 stage 4 after the owner continues, then
+  stage 5 deterministic CI. M3/Jev is planned only. Deployment, deferred Support
+  cleanup and runtime-data migration/deletion were not performed; M9 remains closed.
