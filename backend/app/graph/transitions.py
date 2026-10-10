@@ -33,12 +33,39 @@ def command_error(
         return CommandError("Session is not accepting answers or skips", "not_asking")
     if phase == "asking" and action != "end" and get_active_question(state) is None:
         return CommandError("No active question is available", "missing_question", 409)
-    if action == "answer" and (state.get("current_evaluation") or {}).get(
-        "follow_up_failure"
+    stored_evaluation = state.get("current_evaluation")
+    evaluation = stored_evaluation if isinstance(stored_evaluation, dict) else {}
+    stored_failure = state.get("generation_failure")
+    failure = stored_failure if isinstance(stored_failure, dict) else {}
+    if action == "answer" and (
+        evaluation.get("follow_up_failure")
+        or failure.get("operation") == "follow_up_generation"
     ):
         return CommandError(
             "This answer is already evaluated, but its follow-up is unavailable. Skip or end.",
             "follow_up_unavailable",
+            409,
+        )
+    active = get_active_question(state)
+    if (
+        action == "answer"
+        and active
+        and any(
+            message.get("role") == "candidate"
+            and message.get("content") != "[Skipped]"
+            and message.get("question_id") == active["question_id"]
+            for message in state.get("conversation", [])
+        )
+    ):
+        return CommandError(
+            "This answer is already recorded. Skip or end to continue.",
+            "answer_already_accepted",
+            409,
+        )
+    if action == "answer" and evaluation.get("outcome") == "unsupported_mode":
+        return CommandError(
+            "Evaluation is unavailable in this mode. Skip or end this session.",
+            "evaluation_unsupported_mode",
             409,
         )
     if action == "answer" and (not isinstance(answer, str) or not answer.strip()):

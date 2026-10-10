@@ -1,6 +1,6 @@
 # Refactor handoff
 
-Last updated: 2026-09-22.
+Last updated: 2026-10-10.
 
 ## Start here
 
@@ -32,7 +32,7 @@ real-user processing remain blocked by M9; resolve retained PR data before relea
 |---|---|---|---|
 | M0 | Local baseline accepted for M1; host cleanup deferred by owner | Pending / not assessed | Five GitHub PR refs still retain data; release/distribution issue remains open |
 | M1 | Engineering complete; committed locally | Pending / not assessed | 73 tests pass; real graph/engine integration, lifecycle parity and active-turn evidence below |
-| M2 | Stages 1–2 complete; stopped for owner review | Pending / not assessed | Runtime contracts enforced; outcome UI, metadata and CI remain open |
+| M2 | Stages 1–3 complete; stopped for owner review | Pending / not assessed | Runtime/public contracts and outcome UI implemented; metadata and CI remain open |
 | M3 | Not started | Not recorded | No human-reviewed benchmark yet |
 | M4 | Not started | Not recorded | No evaluation ledger/report yet |
 | M5 | Not started | Not recorded | Retry/restart guarantees not established |
@@ -41,13 +41,14 @@ real-user processing remain blocked by M9; resolve retained PR data before relea
 | M8 | Not selected | Not recorded | Optional; depends on M7 |
 | M9 | Not started | Not recorded | Real-user/public-beta gate remains closed |
 
-## Current scope: M2 stage 2 complete; stop for review
+## Current scope: M2 stage 3 complete; stop for review
 
-The owner authorized M2 with a local commit and a stop between each stage. Stages
-1–2 define and enforce runtime model contracts, remove fabricated fallback scores,
-and halt graph progression on unavailable evaluations. Full public outcomes/UI,
-provider metadata and CI remain open. See the latest stage record and decision 0003.
-Resume with stage 3 after the owner continues. Learning remains separately pending.
+The owner authorized M2 with a local commit and a stop between each stage, then
+explicitly delegated stage 3. Stages 1–3 enforce runtime/public model contracts,
+remove fabricated fallback scores, halt progression on unavailable evaluation and
+restore outcomes/submitted drafts through the UI. Provider metadata/timings and CI
+remain open. See the latest stage record and decision 0003. Resume with stage 4
+after the owner continues. Learning remains separately pending.
 
 Deferred M0 item: GitHub PR refs 1–5 and the draft Support request remain documented
 in HISTORY_REMEDIATION and GITHUB_HISTORY_CLEANUP_REQUEST. The owner chose to defer
@@ -55,13 +56,14 @@ that work; do not treat it as an implementation dependency for M1 or as resolved
 
 ## Remaining engineering limitations
 
-- Model outputs now have runtime validation and explicit non-scored outcomes.
-  Dedicated outcome UI/public union, provider metadata and deterministic CI remain M2.
-  Custom/Hybrid compact evaluation is explicitly unsupported, not scalar-derived.
+- Model outputs have runtime/public validation and dedicated non-scored outcome UI.
+  Provider metadata/timings and deterministic CI remain M2. Custom/Hybrid compact
+  evaluation is explicitly unsupported, not scalar-derived.
 - Evaluation history is cleared on advance; reports remain count-based (M4).
 - Sequential validation is not atomic concurrency control or idempotency (M5).
-- Partial-node failures, full history/draft restoration and process-restart recovery
-  are not guaranteed. Missing legacy follow-up prompts reject commands with 409.
+- Checkpointed conversation, failed outcomes and submitted drafts restore on reconnect.
+  Partial-node interruption, unsent-draft persistence and process-restart recovery are
+  not guaranteed. Missing legacy follow-up prompts reject commands with 409.
 - Model-quality calibration and human-reviewed benchmark evidence do not yet exist (M3).
 - M0 GitHub PR-reference cleanup is deferred; public beta/real-user processing stays blocked.
 
@@ -113,9 +115,10 @@ provider key; live new-upload parsing needs the configured Groq credential.
 Suggested prompt for the next agent:
 
 > Read the roadmap and this handoff; inspect the current worktree. Implementation is
-> delegated, and learning is tracked separately. M1 engineering is complete. M0 host
-> cleanup is explicitly deferred. Start M2 only after owner authorization and stop at
-> its milestone boundary. Preserve runtime data and existing worktree changes.
+> delegated, and learning is tracked separately. M1 and M2 stages 1–3 engineering
+> are complete. M0 host cleanup is explicitly deferred. Resume M2 stage 4 only after
+> the owner continues, and stop for review afterward. Preserve runtime data and
+> existing worktree changes.
 
 ## Record after each implementation slice
 
@@ -596,3 +599,76 @@ records superseded by this explicit owner request; no new push or deployment occ
   No push/deployment. Exact next step: stop for owner review, then stage 3 public
   outcome schemas/types and UI handling, including unavailable/insufficient outcomes,
   draft treatment and reconnect visibility. M2 remains incomplete; do not start M3.
+
+
+## 2026-10-10 — M2 stage 3: public outcomes and checkpoint presentation
+
+The owner explicitly delegated stage 3 implementation. Agent scope: public schemas,
+checkpoint projection, REST/WS adapters, outcome UI, deterministic fixtures and
+verification. Owner exercise: predict score availability and allowed actions for a
+valid zero, insufficient evidence, malformed output and provider timeout, then trace
+one outcome from graph to UI. Owner learning remains pending/not assessed. This
+slice's implementation and evidence are recorded together in its local commit;
+no self-referential commit identity is embedded here.
+
+- Added public contract `interview-outcome-v1` in `backend/app/models/interview.py`
+  and one read-only projection in `graph/public.py`. REST commands/reads and WS
+  commands/connections expose the same typed outcomes, generation failures,
+  submitted draft, active-question answer status, supported actions and conversation.
+  Unknown/corrupt legacy evaluations project safely without a score; older valid tags
+  and stage 2 startup failure codes normalize in memory without data migration.
+- Graph records safe generation failure and the latest accepted evaluation output.
+  Feedback retains question/answer identity after advancement and survives reads/resume;
+  the next mutating command clears it. Completed sessions retain final valid feedback;
+  cancellation clears it. No durable ledger/report or concurrency guarantee was added.
+- Insufficient/invalid/provider evaluation outcomes retain the active prompt and
+  submitted draft. A new explicit answer, skip or end remains allowed. Unsupported
+  evaluation and accepted follow-up failure reject another answer with 409; read/resume,
+  skip and end remain available. Failed startup permits explicit start/end. Supported
+  commands are derived from the same validation used for execution.
+- Chat and video consume checkpoint snapshots, render distinct outcomes, associate
+  feedback with its evaluated prompt, and display a valid zero score. They reconcile
+  accepted conversation without optimistic duplicates and retain local edits on manual
+  reconnect. Reconnect never resends commands. Failed startup has explicit Try again;
+  terminal feedback uses View results rather than automatic navigation. Voice transcripts
+  and local recordings remain available for explicit submission; devices were not tested.
+- Removed raw answer/audio WS payload console logs in the touched transport. Added a
+  dependency-free frontend `npm test` command for the typed presentation/reconciliation
+  helper. No package/lockfile dependency changes or live provider calls.
+- Deterministic fixture revision: `stage3-outcomes-v1`, 37 new backend cases. The full
+  suite increased from 174 to 211 passing cases. Ten frontend fixtures cover all outcome
+  presentations, zero score, edited/cleared drafts, accepted history, generic failures,
+  startup and explicit reconnect behavior. Scoring prompts/rubric/model are unchanged;
+  no human-reviewed benchmark or model-quality delta was measured.
+- Checks actually run:
+  - `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. .venv/bin/python -m pytest tests/
+    -p no:cacheprovider -q`: **211 passed**, five existing SWIG deprecation warnings.
+  - `.venv/bin/ruff check backend rag/retriever.py tests scripts/test_graph.py
+    --config pyproject.toml`: passed; `.venv/bin/black --check backend
+    rag/retriever.py tests scripts/test_graph.py`: passed.
+  - `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. .venv/bin/python scripts/test_graph.py`:
+    mocked start/answer/follow-up/skip/end passed.
+  - Frontend `npm test`: **10 passed**; `./node_modules/.bin/tsc --noEmit
+    --incremental false` and `npm run lint`: passed after the browser-driven UI fixes.
+  - Final `NEXT_TELEMETRY_DISABLED=1 npm run build`: passed after the final UI fixes.
+    Initial build exposed a missing installed native SWC binary; restored the exact
+    installed compiler archive only in ignored node_modules. The compiler worker's
+    local port required sandbox permission. Existing baseline-browser-mapping advisory
+    remains; no dependency upgrade was introduced.
+  - Browser check used a temporary localhost mock server, real graph/engine and memory
+    checkpoints, with newly authored synthetic state only. Verified timeout + refresh,
+    explicit successful submission with one accepted answer, accepted follow-up failure
+    with disabled submission and skip/end, pending startup with manual retry, valid zero,
+    insufficient evidence, and edited draft retained after forced disconnect/manual
+    reconnect. Temporary servers/tab were stopped. The first mock selected on instruction
+    text rather than answer text; corrected the fixture and repeated the affected check.
+  - `git diff --check`: passed after final documentation updates.
+- README, onboarding, contributing guides and decision 0003 describe the implemented
+  public contract and bounded feedback lifetime. Existing Jev planning and local settings
+  edits are preserved outside this stage's commit. No push, deployment, support message,
+  runtime-data migration/deletion or real-data processing occurred.
+- Stage 3 engineering complete; M2 remains incomplete. Exact next step after owner
+  resumes: stage 4 provider/model/usage/finish-reason/version metadata and safe timings/
+  logging. Stage 5 then establishes deterministic CI including frontend outcome fixtures.
+  Do not start M3/Jev, M4 ledger or M5 recovery automatically. M0 host cleanup stays
+  deferred and M9 real-user/public-beta gate remains closed.

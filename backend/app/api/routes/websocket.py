@@ -17,10 +17,7 @@ from fastapi.websockets import WebSocketState
 from backend.app.config import settings
 from backend.app.graph import get_compiled_graph
 from backend.app.graph.commands import execute_command, load_session_state
-from backend.app.graph.state import (
-    get_active_question,
-    normalize_public_status,
-)
+from backend.app.graph.public import websocket_data
 from backend.app.graph.transitions import CommandError, command_error
 from backend.app.services.stt_service import get_stt_service
 from backend.app.services.tts_service import get_tts_service
@@ -134,11 +131,22 @@ async def invoke_graph_for_ws(
             current_answer=current_answer,
         )
     except CommandError as exc:
+        try:
+            current_state = await load_session_state(graph, session_id)
+        except CommandError:
+            data = {"error_code": exc.code, "status_code": exc.status_code}
+        else:
+            data = websocket_data(
+                current_state,
+                session_id,
+                error_code=exc.code,
+                status_code=exc.status_code,
+            )
         return create_ws_message(
             msg_type=WSMessageType.ERROR,
             content=exc.detail,
             error=exc.detail,
-            data={"error_code": exc.code, "status_code": exc.status_code},
+            data=data,
         )
 
     # Map graph response_type to WS message type
@@ -153,7 +161,7 @@ async def invoke_graph_for_ws(
     return create_ws_message(
         msg_type=ws_type_map.get(response_type, WSMessageType.ERROR),
         content=result.get("response_content") or "",
-        data=result.get("response_data"),
+        data=websocket_data(result, session_id),
         error=result.get("error"),
     )
 
@@ -188,26 +196,12 @@ async def interview_websocket(
     await manager.connect(websocket, session_id)
 
     # Send connected message with current session info
-    questions = session_state.get("questions", [])
     idx = session_state.get("current_question_index", 0)
-    active = get_active_question(session_state)
     await websocket.send_json(
         create_ws_message(
             msg_type=WSMessageType.CONNECTED,
             content="Connected to interview session",
-            data={
-                "session_id": session_id,
-                "resume_id": session_state.get("resume_id", ""),
-                "mode": session_state.get("mode", "mixed"),
-                "model_type": session_state.get("model_type", "api"),
-                "status": normalize_public_status(session_state.get("status")),
-                "current_question": active["prompt"] if active else None,
-                "current_question_id": active["question_id"] if active else None,
-                "parent_question_id": active["parent_question_id"] if active else None,
-                "is_follow_up": active["is_follow_up"] if active else False,
-                "question_number": idx + 1,
-                "total_questions": len(questions),
-            },
+            data=websocket_data(session_state, session_id, question_number=idx + 1),
         )
     )
 
@@ -220,9 +214,14 @@ async def interview_websocket(
                 if not isinstance(message, dict):
                     raise ValueError("Expected an object")
             except (json.JSONDecodeError, ValueError):
+                current_state = await load_session_state(graph, session_id)
                 await websocket.send_json(
                     create_ws_message(
-                        msg_type=WSMessageType.ERROR, error="Invalid JSON format"
+                        msg_type=WSMessageType.ERROR,
+                        error="Invalid JSON format",
+                        data=websocket_data(
+                            current_state, session_id, error_code="invalid_message"
+                        ),
                     )
                 )
                 continue
@@ -233,10 +232,14 @@ async def interview_websocket(
             if message_data is None:
                 message_data = {}
             if not isinstance(message_data, dict):
+                current_state = await load_session_state(graph, session_id)
                 await websocket.send_json(
                     create_ws_message(
                         msg_type=WSMessageType.ERROR,
                         error="Message data must be an object",
+                        data=websocket_data(
+                            current_state, session_id, error_code="invalid_message"
+                        ),
                     )
                 )
                 continue
@@ -252,10 +255,14 @@ async def interview_websocket(
             # --- Audio Input (STT) ---
             if msg_type == WSMessageType.ANSWER_AUDIO:
                 if not settings.VOICE_ENABLED:
+                    current_state = await load_session_state(graph, session_id)
                     await websocket.send_json(
                         create_ws_message(
                             msg_type=WSMessageType.ERROR,
                             error="Voice services disabled",
+                            data=websocket_data(
+                                current_state, session_id, error_code="voice_disabled"
+                            ),
                         )
                     )
                     continue
@@ -271,10 +278,12 @@ async def interview_websocket(
                         create_ws_message(
                             msg_type=WSMessageType.ERROR,
                             error=exc.detail,
-                            data={
-                                "error_code": exc.code,
-                                "status_code": exc.status_code,
-                            },
+                            data=websocket_data(
+                                current_state,
+                                session_id,
+                                error_code=exc.code,
+                                status_code=exc.status_code,
+                            ),
                         )
                     )
                     continue
@@ -298,10 +307,16 @@ async def interview_websocket(
 
                 except Exception as e:
                     print(f"STT Error: {e}")
+                    current_state = await load_session_state(graph, session_id)
                     await websocket.send_json(
                         create_ws_message(
                             msg_type=WSMessageType.ERROR,
-                            error=f"Transcription failed: {str(e)}",
+                            error="Transcription failed",
+                            data=websocket_data(
+                                current_state,
+                                session_id,
+                                error_code="transcription_failed",
+                            ),
                         )
                     )
                     continue
@@ -337,8 +352,18 @@ async def interview_websocket(
 
         traceback.print_exc()
         try:
+            current_state = await load_session_state(graph, session_id)
             await websocket.send_json(
-                create_ws_message(msg_type=WSMessageType.ERROR, error=str(e))
+                create_ws_message(
+                    msg_type=WSMessageType.ERROR,
+                    error="Interview command could not be completed",
+                    data=websocket_data(
+                        current_state,
+                        session_id,
+                        error_code="command_failed",
+                        status_code=503,
+                    ),
+                )
             )
         except Exception:
             pass

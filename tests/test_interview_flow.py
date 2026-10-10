@@ -499,7 +499,9 @@ def test_unavailable_evaluation_never_advances_even_at_cap(
             data = result["data"]
     assert result["type"] == "error"
     assert data["error_code"] == f"evaluation_{outcome}"
-    assert not result.get("evaluation")
+    public_evaluation = result.get("evaluation") or data["evaluation"]
+    assert public_evaluation["outcome"] == outcome
+    assert "score" not in public_evaluation
     assert "sentinel" not in json.dumps(result)
     after = snapshot(interview, session_id)
     assert after["status"] == "asking"

@@ -28,8 +28,10 @@ latest LangGraph checkpoint. The active turn stores its exact prompt, question I
 parent main-question ID; reads and reconnects return that turn. A single pure policy
 chooses follow-up versus advance. See the [command/turn decision](docs/decisions/0002-interview-commands-and-turns.md).
 
-Model-output validation, durable evaluation history and retry/concurrency guarantees
-remain unfinished. Passing deterministic tests does not establish model quality. See
+Runtime model-output validation and public outcome handling are implemented; provider
+metadata and deterministic CI remain M2 work. Durable evaluation history and
+retry/concurrency guarantees remain unfinished. Passing deterministic tests does not
+establish model quality. See
 [the roadmap](DEVELOPMENT_ROADMAP.md) and [current handoff](docs/REFACTOR_HANDOFF.md)
 for acceptance evidence and next work.
 
@@ -134,6 +136,7 @@ uv run --extra dev ruff check backend rag/retriever.py tests --config pyproject.
 uv run --extra dev black --check backend rag/retriever.py tests
 
 cd frontend
+npm test
 npx tsc --noEmit
 npm run lint
 npm run build
@@ -185,12 +188,25 @@ out-of-range evaluations do not become fallback scores; short answers reach the
 model instead of receiving a length-based penalty. The compact Custom/Hybrid
 evaluator reports unsupported until it can supply honest dimension judgments.
 
-Unavailable evaluation retains the active question and uses the existing error
-envelope without a score. Insufficient evidence has its own outcome/code. Failed
-question generation leaves the session pending; failed follow-up generation keeps
-the accepted answer and requires skip/end rather than scoring it twice. Dedicated
-outcome UI, metadata/timings and deterministic CI remain later M2 stages. These
-checks establish output validity, not judgment accuracy or retry safety. See the
+REST and WebSocket responses expose a typed evaluation outcome, generation failure,
+current-question answer status, submitted draft and allowed actions. Reads and
+WebSocket connections project the same checkpoint without invoking a model. Evaluation
+failure keeps the active question and submitted text without a score; insufficient
+evidence shows the missing details. The user can explicitly submit a new answer, skip
+or end. Unsupported Custom/Hybrid evaluation permits skip/end rather than another
+unsupported submission.
+
+Failed question generation leaves the session pending with an explicit Start again
+control. Failed follow-up generation keeps the accepted answer and score, and permits
+skip/end rather than scoring it twice. Chat and video restore these outcomes on manual
+reconnect. Reconnect never resubmits a command. A valid score of zero is displayed as
+a score; infrastructure failures have none. The latest successful answer's evaluation
+survives reads/resume even when progression clears the current evaluation. The next
+mutating command clears that feedback; final valid feedback remains after completion.
+This is not a durable evaluation ledger.
+
+Provider metadata/timings and deterministic CI remain later M2 stages. These checks
+establish output validity and presentation, not judgment accuracy or retry safety. See the
 [contract decision and reading guide](docs/decisions/0003-model-output-contracts.md).
 
 ## Data and compatibility

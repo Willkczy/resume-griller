@@ -89,6 +89,9 @@ class InterviewState(TypedDict, total=False):
     active_question: QuestionTurn | None
     current_answer: str | None  # The answer being evaluated right now
     current_evaluation: dict | None  # Result from GrillingEngine.evaluate_answer()
+    generation_failure: (
+        dict | None
+    )  # Safe taxonomy for failed question/follow-up creation
 
     # ─── Conversation History (append-only) ───
     #
@@ -114,6 +117,7 @@ class InterviewState(TypedDict, total=False):
     response_type: Literal["question", "follow_up", "complete", "error"] | None
     response_content: str | None
     response_data: dict | None
+    response_evaluation: dict | None  # Latest command output; not evaluation history
 
     # ─── Input Signal (set by route handler BEFORE invoking graph) ───
     #
@@ -172,6 +176,7 @@ def create_initial_state(
         active_question=None,
         current_answer=None,
         current_evaluation=None,
+        generation_failure=None,
         # Conversation — empty, will be appended to
         conversation=[],
         # Hybrid mode
@@ -180,6 +185,7 @@ def create_initial_state(
         response_type=None,
         response_content=None,
         response_data=None,
+        response_evaluation=None,
         # Input — will be set by route handler before each invocation
         action=None,
         error=None,

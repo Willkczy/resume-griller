@@ -156,8 +156,20 @@ async def generate_questions(state: InterviewState, config: RunnableConfig) -> d
         else:
             result = parse_questions(response, expected_count=num_questions)
     if not isinstance(result, QuestionBatch):
-        return {**model_unavailable("question_generation", result), "status": "pending"}
-    return {"questions": result.questions, "status": "asking", "error": None}
+        return {
+            **model_unavailable("question_generation", result),
+            "status": "pending",
+            "generation_failure": {
+                "operation": "question_generation",
+                "outcome": result.model_dump(mode="json"),
+            },
+        }
+    return {
+        "questions": result.questions,
+        "status": "asking",
+        "error": None,
+        "generation_failure": None,
+    }
 
 
 # ─────────────────────────────────────────────
@@ -201,6 +213,7 @@ async def ask_question(state: InterviewState, config: RunnableConfig) -> dict:
         # Clear per-interaction fields from previous cycle
         "current_answer": None,
         "current_evaluation": None,
+        "generation_failure": None,
         # Append question to conversation
         "conversation": [msg],
         # Output for the route handler
@@ -281,8 +294,10 @@ async def evaluate_answer(state: InterviewState, config: RunnableConfig) -> dict
             "current_evaluation": {
                 **evaluation.model_dump(mode="json"),
                 "question_id": active["question_id"],
+                "parent_question_id": active["parent_question_id"],
                 "answer_id": answer_id,
             },
+            "generation_failure": None,
             "status": "asking",
         }
 
@@ -295,6 +310,14 @@ async def evaluate_answer(state: InterviewState, config: RunnableConfig) -> dict
             "answer_id": answer_id,
             "follow_up_policy_version": POLICY_VERSION,
         },
+        "response_evaluation": {
+            **evaluation.to_dict(),
+            "question_id": active["question_id"],
+            "parent_question_id": active["parent_question_id"],
+            "answer_id": answer_id,
+            "follow_up_policy_version": POLICY_VERSION,
+        },
+        "generation_failure": None,
         "status": "evaluating",
         "error": None,
         "conversation": [answer_msg],
@@ -351,6 +374,10 @@ async def generate_follow_up(state: InterviewState, config: RunnableConfig) -> d
                 **state["current_evaluation"],
                 "follow_up_failure": follow_up.model_dump(mode="json"),
             },
+            "generation_failure": {
+                "operation": "follow_up_generation",
+                "outcome": follow_up.model_dump(mode="json"),
+            },
         }
 
     new_count = state["current_follow_up_count"] + 1
@@ -379,6 +406,8 @@ async def generate_follow_up(state: InterviewState, config: RunnableConfig) -> d
         "active_question": next_turn,
         "current_follow_up_count": new_count,
         "status": "asking",
+        "generation_failure": None,
+        "current_answer": None,
         "conversation": [fu_msg],
         # Output for route handler
         "response_type": "follow_up",
@@ -413,6 +442,7 @@ async def advance_question(state: InterviewState, config: RunnableConfig) -> dic
         "current_follow_up_count": 0,
         "current_answer": None,
         "current_evaluation": None,
+        "generation_failure": None,
     }
 
 
@@ -477,6 +507,8 @@ async def complete_interview(state: InterviewState, config: RunnableConfig) -> d
         "status": "cancelled" if is_cancelled else "completed",
         "active_question": None,
         "current_answer": None,
+        "current_evaluation": None,
+        "generation_failure": None,
         "conversation": [sys_msg],
         "response_type": "complete",
         "response_content": content,

@@ -49,13 +49,21 @@ sends it for transcription after recording stops. It is not streaming STT.
 
 ```bash
 cd frontend
+npm test
 npx tsc --noEmit
 npm run lint
 npm run build
 ```
 
-There is currently no frontend test framework or `npm test` script. Adding component
-and end-to-end coverage is planned production-readiness work.
+`npm test` compiles the outcome presentation/reconciliation helper and runs synthetic
+fixtures with Node's test runner, without additional dependencies. Broader component,
+device and end-to-end coverage remains planned work.
+
+Interview rooms restore typed evaluation outcomes, submitted drafts, allowed actions
+and accepted conversation from checkpoint snapshots. Manual reconnect never resends
+a command. Failed startup requires explicit retry; failed follow-up generation keeps
+the accepted answer and offers skip/end. Final feedback stays visible until the user
+chooses View results.
 
 ## Current result-page limitation
 

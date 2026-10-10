@@ -1,6 +1,6 @@
 # 0003 — Explicit model output contracts
 
-Date: 2026-09-22. Status: stages 1–2 implemented; dedicated outcome UI and metadata pending.
+Date: 2026-09-22. Updated: 2026-10-10. Status: stages 1–3 implemented; metadata and CI pending.
 
 ## Why
 
@@ -12,7 +12,8 @@ stage 2 enforces the contracts and removes those fallback scores.
 ## Contract decisions
 
 `backend/app/models/model_outputs.py` defines internal `model-output-v1` contracts.
-These do not yet replace public API schemas or checkpoint dictionaries.
+Stage 3 adds public schemas in `backend/app/models/interview.py`; checkpoint values
+remain dictionaries and are projected through those schemas at the transport boundary.
 
 | Outcome | Meaning | Score permitted? | Who creates it? |
 |---|---|---|---|
@@ -114,11 +115,53 @@ Question timestamp entropy was removed while replacing the question prompt.
 Follow-up policy has a new identity for its outcome guard; thresholds are unchanged.
 Provider failure classification stores safe categories, not exception messages.
 Stage 4 still owns complete provider/model/usage/finish-reason/timing/version metadata.
-Stage 3 owns the explicit public outcome union and dedicated user experience; this
-stage only adds the valid tag to the existing TypeScript evaluation shape.
+Stage 3 owns the explicit public outcome union and dedicated user experience; stage 2
+only added the valid tag to the existing TypeScript evaluation shape.
 
 Read `test_unavailable_evaluation_never_advances_even_at_cap` and
 `test_failed_follow_up_does_not_create_turn_or_duplicate_answer` in
 `tests/test_interview_flow.py`, then trace `nodes.evaluate_answer`,
 `edges.route_after_evaluate`, and `transitions.command_error`. Explain why a low
 valid score may trigger a follow-up while a timeout cannot trigger any progression.
+
+## Stage 3 public outcomes and command rules
+
+Implemented on 2026-10-10. Public contract identity: `interview-outcome-v1`.
+`graph/public.py` projects one checkpoint into public response data for REST commands,
+session reads, WebSocket commands and connections. The public evaluation union keeps
+the existing valid score/dimension shape and adds the four non-scored branches. The
+generation failure is separate: a failed follow-up can coexist with a valid evaluation.
+Question/answer identities associate feedback with the evaluated turn rather than the
+next question. Older valid checkpoints gain their missing tag in memory; no migration
+or runtime-data rewrite is performed.
+
+| Current condition | Answer text and score | Allowed next commands |
+|---|---|---|
+| Active question, no failed outcome | Local draft; no current score | Resume, answer, skip, end |
+| Insufficient evidence | Checkpointed submitted draft; no score | Resume, new answer, skip, end |
+| Invalid output or provider failure during evaluation | Checkpointed submitted draft; no score | Resume, new answer, skip, end |
+| Unsupported evaluation mode | Checkpointed submitted draft; no score | Resume, skip, end |
+| Follow-up generation failed after evaluation | Accepted answer in conversation; valid score | Resume, skip, end |
+| Startup generation failed | No active question or score | Explicit start, end |
+| Completed or cancelled | Terminal conversation; final valid feedback on completion | Read only |
+
+`allowed_actions` derives from the same command guard that validates execution; it is
+an advisory snapshot, not a concurrency lock. `answer_status` refers to the active
+question. `draft_answer` contains only a submitted answer whose evaluation is unscored.
+Conversation projection lets the UI distinguish accepted messages from local drafts.
+Successful answer feedback is carried in that command's response even when advancing
+clears the current evaluation. Reads and read-only resume retain the latest feedback;
+the next mutating command clears it. Final valid feedback remains after completion,
+while cancellation clears it. This does not replace M4's ledger or make reports
+reconstructible.
+
+Both retained rooms show outcome-specific messages, preserve submitted text until the
+checkpoint confirms acceptance, and expose manual reconnect. A restored startup failure
+does not automatically invoke the model. Reconnect reads state and never replays an
+answer, skip, end or failed start. Unsent drafts are local UI state; durable draft storage,
+unknown-completion recovery, process restart and idempotent retries remain M5.
+
+Owner exercise: predict the public outcome, score availability and allowed actions for
+a valid zero score, insufficient evidence, malformed JSON and timeout. Then trace
+`interview_snapshot`, the command guard and the frontend outcome helper. Implementation
+was delegated; owner understanding remains pending/not assessed.

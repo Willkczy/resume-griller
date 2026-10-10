@@ -104,13 +104,16 @@ Frontend quality:
 
 ```bash
 cd frontend
+npm test
 npx tsc --noEmit
 npm run lint
 npm run build
 ```
 
-The frontend currently has no automated test suite. Adding one is roadmap work, not
-an existing command.
+`npm test` compiles and tests the real outcome presentation/draft-reconciliation
+helper with synthetic fixtures using Node's test runner. It needs no provider key or
+additional test dependency. It does not exercise camera/microphone devices or replace
+browser and recovery testing.
 
 The graph smoke script uses mock services and needs no API key:
 

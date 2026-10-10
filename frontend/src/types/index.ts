@@ -58,15 +58,7 @@ export interface ConversationMessage {
   answer_id?: string | null;
 }
 
-export interface SessionDetail extends Omit<SessionResponse, 'questions_asked'> {
-  current_question: string | null;
-  current_question_id: string | null;
-  parent_question_id: string | null;
-  is_follow_up: boolean;
-  follow_up_count: number;
-  max_follow_ups: number;
-  conversation: ConversationMessage[];
-}
+export type SessionDetail = InterviewSnapshot;
 
 export interface SessionSummary {
   session_id: string;
@@ -83,28 +75,113 @@ export interface SessionSummary {
 
 // ============== Interview Response Types ==============
 
-export interface InterviewResponse {
-  type: 'question' | 'follow_up' | 'complete' | 'error';
-  content: string;
-  question_number?: number;
-  total_questions?: number;
-  evaluation?: AnswerEvaluation;
-  metadata?: Record<string, unknown>;
+export type InterviewAction = 'start' | 'answer' | 'skip' | 'end';
+export type AnswerStatus = 'none' | 'unscored' | 'accepted';
+
+interface EvaluationIdentity {
+  question_id: string | null;
+  parent_question_id: string | null;
+  answer_id: string | null;
 }
 
-export interface AnswerEvaluation {
-  // New evaluations are explicitly valid; older checkpoints may omit this tag.
-  outcome?: 'valid';
-  question_id?: string;
-  parent_question_id?: string | null;
-  answer_id?: string;
-  follow_up_policy_version?: string;
+export type GapType =
+  | 'no_specific_example' | 'no_alternatives' | 'unclear_statement'
+  | 'contradictory' | 'missing_tacit' | 'too_generic' | 'too_long_unfocused'
+  | 'unexplained_jargon' | 'no_tech_depth' | 'wrong_scope' | 'solution_not_exp'
+  | 'mixed_topics' | 'vague_ambiguous' | 'no_concrete_meaning' | 'no_metrics'
+  | 'unclear_role' | 'no_outcome' | 'resume_inconsistent';
+
+export interface ValidEvaluation extends EvaluationIdentity {
+  outcome: 'valid';
+  follow_up_policy_version: string | null;
+  follow_up_failure: GenerationOutcome | null;
   is_sufficient: boolean;
   score: number;
+  detailed_scores: {
+    relevancy: number;
+    clarity: number;
+    informativeness: number;
+    specificity: number;
+    quantification: number;
+    depth: number;
+    completeness: number;
+    overall: number;
+  };
+  gap_analysis: {
+    detected_gaps: GapType[];
+    gap_details: Partial<Record<GapType, string>>;
+    severity: number;
+    priority_gap: GapType | null;
+  };
   missing_elements: string[];
   strengths: string[];
   suggested_follow_up: string | null;
   reasoning: string;
+}
+
+export interface InsufficientEvidence extends EvaluationIdentity {
+  outcome: 'insufficient_evidence';
+  reasoning: string;
+  missing_elements: string[];
+  suggested_follow_up: string | null;
+}
+
+export interface InvalidOutput extends EvaluationIdentity {
+  outcome: 'invalid_output';
+  code: 'invalid_json' | 'schema_violation';
+}
+
+export interface ProviderFailure extends EvaluationIdentity {
+  outcome: 'provider_failure';
+  code: 'timeout' | 'rate_limited' | 'authentication' | 'unavailable' | 'unknown';
+}
+
+export interface UnsupportedMode extends EvaluationIdentity {
+  outcome: 'unsupported_mode';
+  code: 'evaluation_contract_unavailable';
+}
+
+export type AnswerEvaluation = ValidEvaluation | InsufficientEvidence | InvalidOutput
+  | ProviderFailure | UnsupportedMode;
+
+export type GenerationOutcome = Pick<InvalidOutput, 'outcome' | 'code'>
+  | Pick<ProviderFailure, 'outcome' | 'code'> | Pick<UnsupportedMode, 'outcome' | 'code'>;
+
+export interface GenerationFailure {
+  operation: 'question_generation' | 'follow_up_generation';
+  outcome: GenerationOutcome;
+}
+
+/** Authoritative checkpoint projection shared by REST and WebSocket commands. */
+export interface InterviewSnapshot {
+  session_id: string;
+  resume_id: string;
+  mode: string;
+  model_type: string;
+  status: SessionStatus;
+  current_question: string | null;
+  current_question_id: string | null;
+  parent_question_id: string | null;
+  is_follow_up: boolean;
+  total_questions: number;
+  follow_up_count: number;
+  max_follow_ups: number;
+  created_at: string;
+  updated_at: string;
+  conversation: ConversationMessage[];
+  evaluation: AnswerEvaluation | null;
+  generation_failure: GenerationFailure | null;
+  draft_answer: string | null;
+  answer_status: AnswerStatus;
+  allowed_actions: InterviewAction[];
+  current_question_index: number;
+  question_number?: number | null;
+}
+
+export interface InterviewResponse extends InterviewSnapshot {
+  type: 'question' | 'follow_up' | 'complete' | 'error';
+  content: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 // ============== WebSocket Types ==============
@@ -124,7 +201,7 @@ export type WSMessageType =
   | 'transcript'
   | 'pong';
 
-export interface WSMessageData {
+export interface WSMessageData extends Partial<InterviewSnapshot> {
   session_id?: string;
   resume_id?: string;
   mode?: InterviewMode;
@@ -132,15 +209,19 @@ export interface WSMessageData {
   status?: SessionStatus;
   current_question?: string | null;
   current_question_id?: string | null;
-  question_id?: string;
+  question_id?: string | null;
   parent_question_id?: string | null;
   is_follow_up?: boolean;
   follow_up_count?: number;
-  question_number?: number;
+  question_number?: number | null;
   total_questions?: number;
   confidence?: number;
-  error_code?: string;
-  status_code?: number;
+  priority_gap?: GapType | null;
+  follow_up_policy_version?: string | null;
+  summary?: Record<string, unknown> | null;
+  error_code?: string | null;
+  status_code?: number | null;
+  error?: string | null;
   [key: string]: unknown;
 }
 

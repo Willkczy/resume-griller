@@ -42,6 +42,7 @@ async def execute_command(
         raise rejection
     if action == "start" and state["status"] == "asking":
         return {
+            **state,
             **active_question_response(state),
             "model_type": state.get("model_type", "api"),
         }
@@ -52,6 +53,7 @@ async def execute_command(
         action=action,
         current_answer=current_answer if action == "answer" else None,
         error=None,
+        response_evaluation=None,
         updated_at=datetime.now(UTC).isoformat(),
     )
     config = {"configurable": {"thread_id": session_id}}

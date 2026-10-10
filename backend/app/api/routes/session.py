@@ -9,24 +9,26 @@ The graph handles: question generation, answer evaluation, follow-up
 grilling, advancing, skipping, and interview completion.
 """
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.api.deps import get_retriever
 from backend.app.graph import create_initial_state, get_compiled_graph
 from backend.app.graph.commands import execute_command
+from backend.app.graph.public import interview_snapshot
 from backend.app.graph.state import (
     calculate_duration_seconds,
     calculate_questions_asked,
-    get_active_question,
     normalize_public_status,
 )
 from backend.app.graph.transitions import CommandError
 from backend.app.middleware.rate_limit import limiter
+from backend.app.models.interview import InterviewSnapshot
 from rag.retriever import InterviewRetriever
 
 # ============== Request/Response Schemas ==============
-# (unchanged — same API contract for the frontend)
 
 
 class SessionCreateRequest(BaseModel):
@@ -63,48 +65,17 @@ class AnswerRequest(BaseModel):
     answer: str = Field(..., min_length=1)
 
 
-class InterviewResponseModel(BaseModel):
+class InterviewResponseModel(InterviewSnapshot):
     """Response from the interviewer."""
 
-    type: str  # "question", "follow_up", "complete", "error"
+    type: Literal["question", "follow_up", "complete", "error"]
     content: str
     question_number: int | None = None
-    total_questions: int | None = None
-    evaluation: dict | None = None
     metadata: dict | None = None
 
 
-class ConversationMessage(BaseModel):
-    """A message in the conversation."""
-
-    role: str
-    content: str
-    timestamp: str
-    is_follow_up: bool = False
-    question_id: str | None = None
-    parent_question_id: str | None = None
-    answer_id: str | None = None
-
-
-class SessionDetailResponse(BaseModel):
+class SessionDetailResponse(InterviewSnapshot):
     """Detailed session response with conversation."""
-
-    session_id: str
-    resume_id: str
-    mode: str
-    model_type: str
-    status: str
-    current_question: str | None
-    current_question_id: str | None = None
-    parent_question_id: str | None = None
-    is_follow_up: bool = False
-    current_question_index: int
-    total_questions: int
-    follow_up_count: int
-    max_follow_ups: int
-    conversation: list[ConversationMessage]
-    created_at: str
-    updated_at: str
 
 
 class SessionSummaryResponse(BaseModel):
@@ -158,11 +129,10 @@ async def _invoke_graph(
     # Convert graph output to API response
     response_data = result.get("response_data") or {}
     return InterviewResponseModel(
+        **interview_snapshot(result, session_id).model_dump(),
         type=result.get("response_type") or "error",
         content=result.get("response_content") or "",
         question_number=response_data.get("question_number"),
-        total_questions=response_data.get("total_questions"),
-        evaluation=response_data.get("evaluation"),
         metadata={
             "session_id": session_id,
             "model_type": result.get("model_type", "api"),
@@ -261,39 +231,8 @@ async def get_session(session_id: str):
             detail=f"Session not found: {session_id}",
         )
 
-    s = state.values
-    questions = s.get("questions", [])
-    idx = s.get("current_question_index", 0)
-    active = get_active_question(s)
-
     return SessionDetailResponse(
-        session_id=s.get("session_id", session_id),
-        resume_id=s.get("resume_id", ""),
-        mode=s.get("mode", "mixed"),
-        model_type=s.get("model_type", "api"),
-        status=normalize_public_status(s.get("status")),
-        current_question=active["prompt"] if active else None,
-        current_question_id=active["question_id"] if active else None,
-        parent_question_id=active["parent_question_id"] if active else None,
-        is_follow_up=active["is_follow_up"] if active else False,
-        current_question_index=idx,
-        total_questions=len(questions),
-        follow_up_count=s.get("current_follow_up_count", 0),
-        max_follow_ups=s.get("max_follow_ups", 3),
-        conversation=[
-            ConversationMessage(
-                role=m.get("role", "system"),
-                content=m.get("content", ""),
-                timestamp=m.get("timestamp", ""),
-                is_follow_up=m.get("is_follow_up", False),
-                question_id=m.get("question_id"),
-                parent_question_id=m.get("parent_question_id"),
-                answer_id=m.get("answer_id"),
-            )
-            for m in s.get("conversation", [])
-        ],
-        created_at=s.get("created_at", ""),
-        updated_at=s.get("updated_at", ""),
+        **interview_snapshot(state.values, session_id).model_dump()
     )
 
 

@@ -111,11 +111,16 @@ handoff with engineering evidence and owner learning status separately.
   prompt causes a 409 rejection rather than guessing the main question.
 - Model questions/evaluations are runtime validated. Invalid output, provider failure,
   insufficient evidence and unsupported compact evaluation have no score and do not
-  advance the interview. Dedicated outcome UI and provider metadata are still M2 work.
+  advance the interview. Public outcome unions and dedicated UI restore submitted
+  drafts and failures from the checkpoint on manual reconnect. Allowed actions come
+  from the shared command guard; reconnect does not resubmit. Provider metadata and
+  deterministic CI are still M2 work.
 - Full resume text is stored in state but evaluation prompts truncate context.
 - Voice is batch-based and disabled by default in settings and `.env.example`.
   The root dependency set lacks ElevenLabs; live voice remains experimental.
   See `docs/decisions/0001-text-only-baseline.md`.
 - Custom/Hybrid mode requires a separately hosted OpenAI-compatible model.
-- No CI workflow, production container configuration, or frontend test suite exists.
+- No CI workflow or production container configuration exists. Frontend outcome
+  fixtures exercise presentation/reconciliation; broader browser/recovery coverage
+  remains unfinished.
 - No real-user processing or public beta is allowed before roadmap M9 passes.
