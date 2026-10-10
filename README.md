@@ -28,8 +28,10 @@ latest LangGraph checkpoint. The active turn stores its exact prompt, question I
 parent main-question ID; reads and reconnects return that turn. A single pure policy
 chooses follow-up versus advance. See the [command/turn decision](docs/decisions/0002-interview-commands-and-turns.md).
 
-Runtime model-output validation and public outcome handling are implemented; provider
-metadata and deterministic CI remain M2 work. Durable evaluation history and
+As of 2026-10-10, M1 engineering and M2 stages 1–3 are complete: runtime model-output
+validation and public outcome handling are implemented. M2 remains incomplete. The
+next slice is stage 4 provider metadata and safe timings/logging, followed by stage 5
+deterministic CI. Owner learning remains pending. Durable evaluation history and
 retry/concurrency guarantees remain unfinished. Passing deterministic tests does not
 establish model quality. See
 [the roadmap](DEVELOPMENT_ROADMAP.md) and [current handoff](docs/REFACTOR_HANDOFF.md)

@@ -81,9 +81,10 @@ for real-user resumes or expose it as a public beta before roadmap M9 passes.
 
 Use the root roadmap and `docs/REFACTOR_HANDOFF.md`; old milestone numbering is
 obsolete. M2 synchronizes runtime contracts/types and adds CI. M4 adds evidence-backed
-reports. M5 restores actual turns/history and safe draft/retry behavior. M6 shares the
+reports. M5 establishes interruption/restart and safe retry guarantees. M6 shares the
 interview controller, defaults to text, supports parse/transcript review, checks keyboard
 access, and hides unsupported voice/custom behavior. JD/adaptive UI is optional M7/M8.
 
-The current video read-aloud control is a timer placeholder. Camera preview is local;
-no video analysis is implemented. Follow-up counts do not establish answer quality.
+Video read-aloud plays question audio when it is received from the backend. Live
+voice providers and devices remain unverified. Camera preview is local; no video
+analysis is implemented. Follow-up counts do not establish answer quality.

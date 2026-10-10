@@ -16,9 +16,11 @@ The owner explicitly delegated implementation, testing and documentation for the
 current milestone. A separate learning agent guides optional exercises; pending
 learning is not an engineering blocker. Do not automatically start the next milestone.
 The owner authorized isolated rewriting, then the five remote branch updates and
-local adoption on 2026-09-20. Those actions are complete. The owner subsequently authorized local implementation
-commits; see the commit record below. No further push, deployment or external
-support message is authorized.
+local adoption on 2026-09-20. Those actions are complete. The owner subsequently
+authorized local implementation commits; see the commit record below. On 2026-10-10
+the owner authorized pushing the latest work and updating GitHub to reflect project
+status. This publication slice does not start M2 stage 4, authorize deployment, or
+resume the deferred external Support request.
 
 M0's local synthetic-data baseline, clean setup, and local/remote-branch history
 sanitation are verified. Five GitHub PR refs still retain historical artifacts.
@@ -31,9 +33,9 @@ real-user processing remain blocked by M9; resolve retained PR data before relea
 | Milestone | Engineering status | Owner learning status | Evidence / blocker |
 |---|---|---|---|
 | M0 | Local baseline accepted for M1; host cleanup deferred by owner | Pending / not assessed | Five GitHub PR refs still retain data; release/distribution issue remains open |
-| M1 | Engineering complete; committed locally | Pending / not assessed | 73 tests pass; real graph/engine integration, lifecycle parity and active-turn evidence below |
+| M1 | Engineering complete | Pending / not assessed | 73 tests passed at M1; real graph/engine integration, lifecycle parity and active-turn evidence below |
 | M2 | Stages 1–3 complete; stopped for owner review | Pending / not assessed | Runtime/public contracts and outcome UI implemented; metadata and CI remain open |
-| M3 | Not started | Not recorded | No human-reviewed benchmark yet |
+| M3 | Not started; Jev comparison planned after M2 | Not recorded | No human-reviewed benchmark yet |
 | M4 | Not started | Not recorded | No evaluation ledger/report yet |
 | M5 | Not started | Not recorded | Retry/restart guarantees not established |
 | M6 | Not started | Not recorded | Shared UI controller/support cleanup not implemented |
@@ -50,6 +52,13 @@ restore outcomes/submitted drafts through the UI. Provider metadata/timings and 
 remain open. See the latest stage record and decision 0003. Resume with stage 4
 after the owner continues. Learning remains separately pending.
 
+On 2026-09-22 the owner requested adding the Jev comparison to the plan and stated
+they would return to finish M2 first. That September planning update performed no
+M2 or Jev implementation. The planned M3 comparison is recorded in the
+[roadmap](../DEVELOPMENT_ROADMAP.md#planned-m3-comparison-jev-answer-gap-detection).
+Keep M2 as the immediate priority, then evaluate Jev without changing interview
+behavior before considering adoption.
+
 Deferred M0 item: GitHub PR refs 1–5 and the draft Support request remain documented
 in HISTORY_REMEDIATION and GITHUB_HISTORY_CLEANUP_REQUEST. The owner chose to defer
 that work; do not treat it as an implementation dependency for M1 or as resolved.
@@ -59,7 +68,8 @@ that work; do not treat it as an implementation dependency for M1 or as resolved
 - Model outputs have runtime/public validation and dedicated non-scored outcome UI.
   Provider metadata/timings and deterministic CI remain M2. Custom/Hybrid compact
   evaluation is explicitly unsupported, not scalar-derived.
-- Evaluation history is cleared on advance; reports remain count-based (M4).
+- The latest accepted feedback survives advancement until the next mutating command;
+  there is no durable per-turn evaluation ledger and reports remain count-based (M4).
 - Sequential validation is not atomic concurrency control or idempotency (M5).
 - Checkpointed conversation, failed outcomes and submitted drafts restore on reconnect.
   Partial-node interruption, unsent-draft persistence and process-restart recovery are
@@ -503,6 +513,21 @@ of this commit pass. No runtime payloads or local settings were staged.
 Owner learning remains pending/not assessed. M2 remains eligible but unauthorized.
 The earlier 'uncommitted'/'no commit authorized' statements are dated historical
 records superseded by this explicit owner request; no new push or deployment occurred.
+
+## 2026-09-22 — Plan Jev comparison after M2
+
+- Owner requested recording the proposed experiment and will return to M2 first.
+  Updated the roadmap and current handoff; no implementation or milestone completion.
+- M3 will compare Jev answer-gap judgments with the existing evaluator and human
+  labels on synthetic cases, initially without changing interview behavior.
+  Adoption depends on predefined quality, uncertainty, latency and cost evidence.
+- Owner exercise: label gaps and follow-up need before viewing model outputs;
+  learning remains pending/not assessed. Agent scope: future adapter, runner and
+  analysis, after M2. No benchmark run or model-quality delta exists for this change.
+- Check: `git diff --check` passed. Documentation-only change; tests not rerun.
+  Existing local settings changes preserved. No commit, push or provider call made.
+- Exact next step: finish M2 contracts and deterministic CI before starting the
+  planned M3 comparison.
 
 
 ## 2026-09-22 — M2 stage 1: contracts and defect reproductions

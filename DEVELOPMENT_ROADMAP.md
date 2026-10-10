@@ -3,6 +3,11 @@
 Plan adopted: 2026-09-10. Assessment performed: 2026-09-09.
 Status: planning complete; implementation gates remain open.
 
+Current progress as of 2026-10-10: M1 engineering and M2 stages 1–3 are complete;
+M2 metadata/timings and deterministic CI remain open. Owner learning is separately
+pending. See [the handoff](docs/REFACTOR_HANDOFF.md) for current evidence and the
+exact next slice. The baseline findings and initial status table below are historical.
+
 This is the canonical implementation plan. It supersedes the previous 12-week
 M0–M8 plan. Milestone numbers below have new meanings: do not use old chats or old
 milestone references as implementation authority. There is no fixed completion date;
@@ -23,7 +28,8 @@ roles. Optimize for explainable behavior and measured quality, not technology co
   unresolved questions, and the handoff record. Update it after implementation work.
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md): setup and verification commands.
 
-No application behavior is fixed merely by adopting this plan. Start with M0.
+No application behavior is fixed merely by adopting this plan. New implementations
+start with M0; continuation of this project follows the current handoff.
 
 ## Verified baseline and immediate risks
 
@@ -54,8 +60,9 @@ Inspection established additional problems, to reproduce with tests when address
 - Tracked resume artifacts and inference notebook have unresolved provenance. Two
   tracked PDFs have identical bytes. No complete historical PII audit was performed.
 
-Tests currently isolate away several integration seams and most evaluator behavior.
-Passing the existing suite is necessary but insufficient to close these findings.
+At that assessment, tests isolated away several integration seams and most evaluator
+behavior. Later reproductions and fixes are recorded in the handoff; passing tests
+alone do not close every finding or establish model quality.
 
 ## Target design and constraints
 
@@ -275,6 +282,34 @@ candidate synthetic examples for human review and summarize experiment results.
 - Store sanitized result artifacts and failure analysis. Paid runs are explicit commands,
   separate from unit tests; scheduled runs require separate scheduling authorization.
 - Owner can defend labels, metrics, experiment conclusions and limitations.
+
+#### Planned M3 comparison: Jev answer-gap detection
+
+Added at the owner's request on 2026-09-22. Complete M2 first: valid evaluation,
+insufficient evidence and provider failure must remain distinct outcomes. Jev's
+typed responses do not replace application contracts. This plan does not start
+Jev implementation or live provider runs.
+
+- Use Jev as the controlled comparison for bounded answer-gap judgments against
+  the existing evaluator and human labels. Start with the 10–15 synthetic pilot
+  cases above, then expand to 30–50 after the labeling protocol works.
+- Run offline or in shadow mode initially: record judgments without changing
+  interview behavior. Keep follow-up caps and transitions in deterministic code;
+  retain generative models or templates for follow-up wording.
+- Measure gap precision/recall, unnecessary and missed follow-ups, contradiction
+  false positives, uncertainty/calibration, and total latency/cost including
+  fallback and text-generation calls. Distinguish absent resume evidence from
+  contradiction, and concise correct answers from insufficient answers.
+- Version the model, questions/rubric, schema and dataset. Define promotion
+  thresholds after pilot labeling and before held-out runs; adopt only if the
+  comparison demonstrates a specific benefit. Report negative results too.
+- Owner exercise: label evidence gaps and follow-up need before viewing model
+  output. Agent scope: decision-service adapter, replay/comparison tooling and
+  sanitized result analysis. Human understanding remains separately assessed.
+
+Research references: [TypeSafe primitives](https://docs.typesafe.ai/introduction),
+[confidence semantics](https://docs.typesafe.ai/confidence), and
+[KillMyIdea's rubric example](https://github.com/monteduro/killmyidea).
 
 ### M4 — Durable feedback and coaching report
 
