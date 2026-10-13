@@ -4,31 +4,15 @@ Interview Graph — LangGraph-based interview orchestration.
 This module replaces the duplicated interview logic that was previously
 spread across interview_agent.py, session.py, and websocket.py.
 
-Usage from route handlers:
-
-    from backend.app.graph import get_compiled_graph, GraphServices, create_initial_state
-
-    # 1. Create services based on model type
-    services = GraphServices.create(model_type, retriever, prepared_context)
-
-    # 2. Get the compiled graph
-    graph = await get_compiled_graph()
-
-    # 3. Invoke with action
-    result = await graph.ainvoke(
-        {"action": "start"},
-        config={"configurable": {"thread_id": session_id, "services": services}},
-    )
-
-    # 4. Read output from result
-    response_type = result["response_type"]    # "question", "follow_up", "complete", "error"
-    response_content = result["response_content"]
-    response_data = result["response_data"]
+Route handlers call graph.commands.execute_command with the compiled graph,
+session_id, action and optional answer. That boundary validates the latest checkpoint
+and injects GraphServices via config. It does not own a separate session store.
+Only graph nodes advance interview state. See decisions/0002-interview-commands-and-turns.md.
 """
 
-from backend.app.graph.state import InterviewState, create_initial_state
-from backend.app.graph.services import GraphServices
 from backend.app.graph.checkpointer import get_compiled_graph
+from backend.app.graph.services import GraphServices
+from backend.app.graph.state import InterviewState, create_initial_state
 
 __all__ = [
     "InterviewState",

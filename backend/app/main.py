@@ -3,22 +3,17 @@ Resume Griller - FastAPI Backend
 Main application entry point.
 """
 
-import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 
-# Add project root to path for imports
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
-
-from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.app.api.routes import resume, session, voice, websocket
 from backend.app.config import settings
-from backend.app.models.schemas import HealthCheck
 from backend.app.core.logging_config import configure_logging, get_logger
-from backend.app.middleware.rate_limit import setup_rate_limiting, limiter
-from backend.app.api.routes import resume, session, websocket, voice
+from backend.app.middleware.rate_limit import setup_rate_limiting
+from backend.app.models.schemas import HealthCheck
 
 # Configure logging
 configure_logging(debug=settings.DEBUG)
@@ -29,21 +24,28 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup
-    logger.info("starting_application",
-                app_name=settings.APP_NAME,
-                llm_mode=settings.LLM_MODE,
-                llm_provider=settings.LLM_PROVIDER if settings.LLM_MODE == "api" else None)
+    logger.info(
+        "starting_application",
+        app_name=settings.APP_NAME,
+        llm_mode=settings.LLM_MODE,
+        llm_provider=settings.LLM_PROVIDER if settings.LLM_MODE == "api" else None,
+    )
 
     # Ensure directories exist
-    from pathlib import Path
     upload_dir = Path(settings.UPLOAD_DIR)
     chroma_dir = Path(settings.CHROMA_PERSIST_DIR)
+    parsed_resume_dir = Path(settings.PARSED_RESUME_DIR)
+    checkpoint_dir = Path(settings.CHECKPOINT_DB_PATH).parent
 
     upload_dir.mkdir(parents=True, exist_ok=True)
     chroma_dir.mkdir(parents=True, exist_ok=True)
-    logger.info("data_directories_initialized",
-                upload_dir=str(upload_dir),
-                chroma_dir=str(chroma_dir))
+    parsed_resume_dir.mkdir(parents=True, exist_ok=True)
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(
+        "data_directories_initialized",
+        upload_dir=str(upload_dir),
+        chroma_dir=str(chroma_dir),
+    )
 
     yield
 
@@ -76,12 +78,13 @@ setup_rate_limiting(app)
 
 # Include API routers
 app.include_router(resume.router, prefix=settings.API_V1_PREFIX)
-app.include_router(session.router, prefix=settings.API_V1_PREFIX) 
+app.include_router(session.router, prefix=settings.API_V1_PREFIX)
 app.include_router(voice.router, prefix=settings.API_V1_PREFIX)
 app.include_router(websocket.router)
 
 
 # ============== Health Check ==============
+
 
 @app.get("/health", response_model=HealthCheck, tags=["health"])
 async def health_check():
@@ -101,8 +104,11 @@ async def health_check():
     if settings.CUSTOM_MODEL_ENABLED:
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(f"{settings.CUSTOM_MODEL_URL}/v1/models")
+                response = await client.get(
+                    f"{settings.CUSTOM_MODEL_URL.rstrip('/')}/models"
+                )
                 custom_model_available = response.status_code == 200
         except Exception:
             custom_model_available = False
@@ -136,6 +142,7 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(
         "backend.app.main:app",
         host="0.0.0.0",

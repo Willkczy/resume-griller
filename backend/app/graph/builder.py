@@ -53,12 +53,14 @@ The compiled graph is what you .ainvoke() from route handlers.
                        END
 
    "error" → handle_error → END
+   Unavailable question generation/evaluation → END with explicit error envelope.
+   Failed follow-up generation → END without adding an interviewer turn.
 """
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
+from backend.app.graph import edges, nodes
 from backend.app.graph.state import InterviewState
-from backend.app.graph import nodes, edges
 
 
 def build_interview_graph() -> StateGraph:
@@ -83,6 +85,7 @@ def build_interview_graph() -> StateGraph:
     graph.add_node("handle_skip", nodes.handle_skip)
     graph.add_node("handle_end", nodes.handle_end)
     graph.add_node("handle_error", nodes.handle_error)
+    graph.add_node("resume_question", nodes.resume_question)
 
     # Step 3: Set entry point — first thing that runs on every invocation
     # This is a CONDITIONAL entry: route_action reads state["action"]
@@ -95,6 +98,7 @@ def build_interview_graph() -> StateGraph:
             "skip": "handle_skip",
             "end": "handle_end",
             "error": "handle_error",
+            "resume": "resume_question",
         },
     )
 
@@ -102,7 +106,11 @@ def build_interview_graph() -> StateGraph:
 
     # --- "start" flow ---
     # generate_questions → ask_question → END
-    graph.add_edge("generate_questions", "ask_question")
+    graph.add_conditional_edges(
+        "generate_questions",
+        edges.route_after_generation,
+        {"ready": "ask_question", "unavailable": END},
+    )
     graph.add_edge("ask_question", END)
 
     # --- "answer" flow ---
@@ -111,6 +119,7 @@ def build_interview_graph() -> StateGraph:
         "evaluate_answer",
         edges.route_after_evaluate,
         {
+            "unavailable": END,
             "grill": "generate_follow_up",
             "advance": "advance_question",
             "done": "complete_interview",
@@ -139,5 +148,6 @@ def build_interview_graph() -> StateGraph:
 
     # --- "error" flow ---
     graph.add_edge("handle_error", END)
+    graph.add_edge("resume_question", END)
 
     return graph

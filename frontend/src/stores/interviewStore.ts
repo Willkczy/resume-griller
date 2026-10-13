@@ -1,9 +1,8 @@
 // frontend/src/stores/interviewStore.ts
 
 import { create } from 'zustand';
-import type { 
-  ConversationMessage, 
-  InterviewMode, 
+import type {
+  InterviewMode,
   SessionStatus,
   AnswerEvaluation 
 } from '@/types';

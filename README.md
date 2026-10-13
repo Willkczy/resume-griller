@@ -1,606 +1,251 @@
-# Resume Griller 🔥
+# Resume Griller
 
-> **AI-powered interview simulator that grills candidates with resume-specific questions**
+Resume Griller is a full-stack AI mock interview application. It parses a resume,
+generates resume-specific questions, evaluates answers across seven dimensions,
+and asks targeted follow-up questions when an answer lacks evidence or detail.
 
-An intelligent interview preparation platform that analyzes your resume and conducts realistic mock interviews with AI. Features voice support, adaptive follow-up questions based on a Mistake-Guided Framework, and multiple interview modes (HR, Technical, Mixed).
+## Current status
 
----
+The active architecture uses LangGraph with SQLite checkpoints. Resume uploads are
+parsed into structured Markdown and the complete parsed resume is stored in graph
+state for the duration of an interview.
 
-## Table of Contents
+- Internal interview phases: `pending`, `generating`, `asking`, `evaluating`,
+  `completed`, `cancelled`
+- Public lifecycle: `pending`, `in_progress`, `completed`, `cancelled`
+- New uploads: PDF and UTF-8 TXT
+- Legacy resumes: read from ChromaDB only when no parsed Markdown exists
+- Session persistence: SQLite through LangGraph `AsyncSqliteSaver`
 
-- [Features](#features)
-- [Architecture](#architecture)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Usage](#usage)
-- [Custom Model Deployment](#custom-model-deployment)
-- [API Reference](#api-reference)
-- [Development](#development)
-- [Troubleshooting](#troubleshooting)
-- [License](#license)
+The project is a development prototype. Authentication, user ownership, production
+deployment, and validated model-quality claims are not included yet. The current
+implementation is suitable for local development, not for processing real user
+resumes or operating a public beta.
 
----
+Session creation and repeated follow-up targeting now have real-graph integration
+coverage with mocked models. REST and WebSocket commands share validation against the
+latest LangGraph checkpoint. The active turn stores its exact prompt, question ID and
+parent main-question ID; reads and reconnects return that turn. A single pure policy
+chooses follow-up versus advance. See the [command/turn decision](docs/decisions/0002-interview-commands-and-turns.md).
 
-## Features
+As of 2026-10-10, M1 engineering and M2 stages 1–3 are complete: runtime model-output
+validation and public outcome handling are implemented. M2 remains incomplete. The
+next slice is stage 4 provider metadata and safe timings/logging, followed by stage 5
+deterministic CI. Owner learning remains pending. Durable evaluation history and
+retry/concurrency guarantees remain unfinished. Passing deterministic tests does not
+establish model quality. See
+[the roadmap](DEVELOPMENT_ROADMAP.md) and [current handoff](docs/REFACTOR_HANDOFF.md)
+for acceptance evidence and next work.
 
-### Core Interview Experience
+## Documentation map
 
-- **Resume Analysis**: Upload PDF/TXT resumes for AI-powered parsing and semantic analysis
-- **Multiple Interview Modes**:
-  - **HR Mode**: Behavioral STAR questions focused on soft skills, teamwork, and leadership
-  - **Technical Mode**: Deep technical questions about architecture, implementation, and trade-offs
-  - **Mixed Mode**: Comprehensive interview combining both HR and technical questions
-- **Intelligent Grilling Engine**: Based on "Requirements Elicitation Follow-Up Question Generation" paper
-  - 18 gap types for answer evaluation (no_specific_example, no_metrics, unclear_role, etc.)
-  - 7-dimensional scoring (relevancy, clarity, informativeness, specificity, quantification, depth, completeness)
-  - Forced first follow-up to ensure depth
-  - Resume consistency checking
-- **Voice Support**:
-  - Speech-to-Text (STT) via Deepgram
-  - Text-to-Speech (TTS) via ElevenLabs
-  - Real-time voice interview simulation with sound on/off control
-- **Real-time Communication**: WebSocket-based interactive interview sessions
-- **Persistent Sessions**: Interview state checkpointed to SQLite via LangGraph — survives server restarts
-
-### LLM Backend Options
-
-| Mode | Provider | Use Case |
-|------|----------|----------|
-| **API Mode** | Groq (Llama 3.3 70B) | Recommended - Fast and free |
-| **API Mode** | Gemini, OpenAI, Claude | Alternative cloud providers |
-| **Hybrid Mode** | Groq + Custom Model | Best quality with fine-tuned model |
-| **Custom Mode** | Self-hosted vLLM on GCP | Full control, uses fine-tuned LoRA |
-
-### Hybrid Model Architecture
-
-The Hybrid mode provides the best interview quality by combining:
-- **Groq (Preprocessing)**: Handles resume summarization, question generation, and context preparation
-- **Custom Model (Execution)**: Fine-tuned Mistral-7B for answer evaluation and follow-up generation
-
-```
-Phase 1 (Groq - Preprocessing):
-  ├─ Generate condensed resume summary (~200 tokens)
-  ├─ Generate targeted interview questions
-  └─ Prepare per-question evaluation context
-
-Phase 2 (Custom Model - Interview Execution):
-  ├─ Evaluate answers using compact prompts
-  ├─ Detect gaps in responses
-  └─ Generate contextual follow-up questions
-```
-
----
+| Document | Authority |
+|---|---|
+| `README.md` | Current setup, architecture, routes, and runtime boundaries |
+| `DEVELOPMENT_ROADMAP.md` | Canonical future plan, milestones, gates, and non-goals |
+| `AI_ONBOARDING.md` | Short engineering context and invariants |
+| `docs/CONTRIBUTING.md` | Development and contribution workflow |
+| `docs/REFACTOR_HANDOFF.md` | Current milestone evidence, owner learning status, next slice |
+| `docs/PROJECT_REASSESSMENT.md` | Dated code assessment and recruiting rationale |
+| `frontend/README.md` | Frontend-specific setup and architecture |
+| `ml/README.md` | Experimental ML assets and fine-tuning prerequisites |
 
 ## Architecture
 
-### Full-Stack Application Flow
-
-```
-┌─────────────────┐
-│    Frontend     │  Next.js 16 + React 19 + TypeScript + Tailwind CSS
-│   (Port 3000)   │
-└────────┬────────┘
-         │ HTTP/WebSocket
-         ▼
-┌─────────────────┐
-│    Backend      │  FastAPI + Python 3.11+ + Async I/O
-│   (Port 8000)   │
-└────────┬────────┘
-         │
-         ├──────► LangGraph Interview Graph
-         │         ├─► StateGraph with 9 nodes + 3 routers
-         │         ├─► SQLite checkpoint persistence
-         │         └─► GraphServices dependency injection
-         │
-         ├──────► LLM Service
-         │         ├─► API Mode: Groq / Gemini / OpenAI / Claude
-         │         ├─► Hybrid Mode: Groq + Custom Model
-         │         └─► Custom Mode: vLLM on GCP (via IAP Tunnel)
-         │
-         ├──────► Grilling Engine
-         │         ├─► Gap Detection (18 types)
-         │         ├─► Multi-dimensional Scoring
-         │         └─► Follow-up Generation
-         │
-         ├──────► Voice Services
-         │         ├─► Deepgram (STT)
-         │         └─► ElevenLabs (TTS)
-         │
-         └──────► RAG Pipeline
-                   ├─► Resume Parser (pdfplumber/PyMuPDF)
-                   ├─► Semantic Chunker
-                   ├─► ChromaDB Embedder (all-MiniLM-L6-v2)
-                   └─► Context Retriever
+```text
+Next.js frontend
+  ├─ REST: upload, session management, summaries, voice
+  └─ WebSocket: live interview messages
+        ↓
+FastAPI backend
+  ├─ LangGraph interview graph
+  │    ├─ question generation
+  │    ├─ answer evaluation
+  │    ├─ follow-up generation
+  │    └─ SQLite checkpoints
+  ├─ Grilling Engine: 18 gap types and 7D scoring
+  ├─ LLM: 4 API providers plus Custom/Hybrid execution modes
+  ├─ Voice: batch Deepgram STT and ElevenLabs TTS (optional, not yet verified)
+  └─ Resume processing
+       ├─ primary: data/parsed_resumes/{resume_id}.md
+       └─ legacy fallback: ChromaDB
 ```
 
-### Custom Model on GCP
+Important code:
 
-```
-┌─────────────────┐     IAP Tunnel      ┌─────────────────────────┐
-│  Local Machine  │ ◄─────────────────► │  GCP Compute Engine     │
-│  (Port 8001)    │    gcloud tunnel    │  (GPU: T4/L4/A100)      │
-└─────────────────┘                     │                         │
-                                        │  vLLM Server (Port 8000)│
-                                        │  ├─ Mistral-7B-Instruct │
-                                        │  └─ LoRA Adapter        │
-                                        └─────────────────────────┘
-```
+- `backend/app/graph/` — interview orchestration and checkpointed state
+- `backend/app/core/grilling_engine.py` — evaluation and follow-up logic
+- `backend/app/services/llm_service.py` — provider abstraction
+- `rag/retriever.py` — Markdown-first resume access and legacy fallback
+- `frontend/src/components/interview/` — chat and video interview clients
 
----
+## Setup
 
-## Tech Stack
-
-### Frontend
-- **Framework**: Next.js 16 (App Router)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS 4
-- **State Management**: Zustand
-- **UI Components**: Custom components + Lucide React icons
-- **Real-time**: WebSocket API
-
-### Backend
-- **Framework**: FastAPI
-- **Language**: Python 3.11+
-- **Package Manager**: [uv](https://github.com/astral-sh/uv) (recommended) or pip
-- **Async Runtime**: uvicorn + asyncio
-- **Orchestration**: LangGraph (StateGraph + SQLite checkpointing)
-- **LLM Clients**: groq, anthropic, openai, google-generativeai
-
-### RAG Pipeline
-- **Resume Parsing**: pdfplumber, PyMuPDF
-- **Vector Database**: ChromaDB
-- **Embeddings**: sentence-transformers (all-MiniLM-L6-v2)
-- **LLM Framework**: Transformers, PEFT (for LoRA)
-
-### Voice Services
-- **STT**: Deepgram (nova-2 model)
-- **TTS**: ElevenLabs (eleven_flash_v2_5 model)
-
-### Custom Model Infrastructure
-- **Cloud**: Google Cloud Platform (Compute Engine)
-- **GPU**: T4 / L4 / A100
-- **Inference Server**: vLLM
-- **Tunnel**: IAP (Identity-Aware Proxy)
-
----
-
-## Project Structure
-
-```
-resume-griller/
-├── backend/                      # FastAPI backend
-│   └── app/
-│       ├── graph/               # LangGraph interview orchestration
-│       │   ├── state.py         # InterviewState TypedDict
-│       │   ├── nodes.py         # 9 graph node functions
-│       │   ├── edges.py         # 3 routing functions
-│       │   ├── builder.py       # StateGraph construction
-│       │   ├── services.py      # GraphServices dependency injection
-│       │   └── checkpointer.py  # SQLite checkpoint persistence
-│       ├── api/routes/
-│       │   ├── resume.py        # Resume upload & processing
-│       │   ├── session.py       # Interview session endpoints (via graph)
-│       │   ├── voice.py         # STT/TTS endpoints
-│       │   └── websocket.py     # Real-time interview handler (via graph)
-│       ├── core/
-│       │   └── grilling_engine.py   # Gap detection & follow-ups
-│       ├── services/
-│       │   ├── llm_service.py   # LLM provider abstraction
-│       │   │                    # (Groq, Gemini, OpenAI, Custom, Hybrid)
-│       │   ├── stt_service.py   # Deepgram integration
-│       │   └── tts_service.py   # ElevenLabs integration
-│       ├── config.py            # Settings from .env
-│       └── main.py              # FastAPI app entry
-│
-├── frontend/                     # Next.js frontend
-│   └── src/
-│       ├── app/                 # App router pages
-│       ├── components/
-│       │   ├── interview/       # Interview UI components
-│       │   │   ├── VideoInterviewRoom.tsx
-│       │   │   └── VoiceRecorder.tsx
-│       │   └── upload/
-│       │       └── ResumeUploader.tsx
-│       └── stores/              # Zustand stores
-│
-├── rag/                          # RAG Pipeline
-│   ├── resume_parser.py         # PDF/TXT parsing
-│   ├── chunker.py               # Semantic chunking
-│   ├── embedder.py              # ChromaDB operations
-│   └── retriever.py             # Context retrieval
-│
-├── data/
-│   ├── sample_resumes/          # Test resumes
-│   ├── chromadb/                # Vector database
-│   ├── interview_checkpoints.db # LangGraph session state (SQLite)
-│   └── uploads/                 # User uploads
-│
-├── scripts/
-│   ├── test_graph.py            # Interactive graph test (mock services)
-│   └── start_iap_tunnel.sh      # GCP IAP tunnel helper
-│
-├── pyproject.toml               # Python project config (uv)
-├── uv.lock                      # Locked dependencies
-├── .env.example                 # Environment template
-└── README.md
-```
-
----
-
-## Prerequisites
-
-### Required
-- **Python**: 3.11 or higher
-- **Node.js**: 18.x or higher
-- **uv**: Python package manager ([install guide](https://github.com/astral-sh/uv))
-
-### Optional
-- **GCP Account**: For custom model deployment
-- **GPU Instance**: T4/L4/A100 for vLLM inference
-
----
-
-## Installation
-
-### 1. Clone the Repository
+Requirements: Python 3.11+, [uv](https://docs.astral.sh/uv/), and Node.js 20+.
 
 ```bash
-git clone https://github.com/Willkczy/resume-griller.git
-cd resume-griller
+uv sync --extra dev
+cp .env.example .env
 ```
 
-### 2. Backend Setup (using uv)
+At minimum, configure the provider selected by `LLM_PROVIDER`. Resume parsing uses
+Groq, so `GROQ_API_KEY` is required for new uploads.
 
-```bash
-# Install uv if not already installed
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Create virtual environment and install dependencies
-uv sync
-
-# Activate the virtual environment
-source .venv/bin/activate  # Linux/Mac
-# or
-.venv\Scripts\activate     # Windows
-```
-
-### 3. Frontend Setup
+`LLM_MODE=local` is present in settings but is not connected to the active service
+factory. Use API interview mode for scored interviews; Custom/Hybrid compact
+evaluation currently reports unsupported. Do not rely on automatic local LoRA loading.
 
 ```bash
 cd frontend
-npm install
-cd ..
+npm ci
+cp .env.example .env.local
 ```
 
-### 4. Create Data Directories
+The frontend defaults to `http://localhost:8000` and `ws://localhost:8000` when
+the corresponding public environment variables are absent.
+
+## Run locally
+
+Backend:
 
 ```bash
-mkdir -p data/uploads data/chromadb
+PYTHONPATH=. uv run uvicorn backend.app.main:app --reload --port 8000
 ```
 
-### 5. Configure Environment
-
-```bash
-cp .env.example .env
-# Edit .env with your API keys
-```
-
----
-
-## Configuration
-
-### Environment Variables
-
-Create a `.env` file in the project root:
-
-```bash
-# ============== LLM Configuration ==============
-# Provider: anthropic, openai, gemini, groq
-LLM_PROVIDER=groq
-
-# API Keys
-GROQ_API_KEY=your_groq_api_key_here
-GOOGLE_API_KEY=your_google_api_key_here        # Optional
-ANTHROPIC_API_KEY=your_anthropic_api_key_here  # Optional
-OPENAI_API_KEY=your_openai_api_key_here        # Optional
-
-# Model names
-GROQ_MODEL=llama-3.3-70b-versatile
-GEMINI_MODEL=gemini-2.0-flash-exp
-
-# ============== Custom Model (GCP vLLM) ==============
-CUSTOM_MODEL_URL=http://localhost:8001/v1
-CUSTOM_MODEL_NAME=mistralai/Mistral-7B-Instruct-v0.2
-CUSTOM_MODEL_TIMEOUT=120
-
-# ============== Voice Services ==============
-VOICE_ENABLED=true
-DEEPGRAM_API_KEY=your_deepgram_api_key_here
-ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
-ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM
-
-# ============== RAG Settings ==============
-CHROMA_PERSIST_DIR=./data/chromadb
-EMBEDDING_MODEL=all-MiniLM-L6-v2
-
-# ============== File Upload ==============
-UPLOAD_DIR=./data/uploads
-MAX_UPLOAD_SIZE=10485760
-```
-
-### Quick Setup Options
-
-#### Option 1: API Mode with Groq (Recommended)
-```bash
-LLM_PROVIDER=groq
-GROQ_API_KEY=your_key_here
-```
-Fast, free, and easy to set up.
-
-#### Option 2: Hybrid Mode (Best Quality)
-```bash
-LLM_PROVIDER=groq
-GROQ_API_KEY=your_key_here
-CUSTOM_MODEL_URL=http://localhost:8001/v1
-```
-Requires GCP setup (see [Custom Model Deployment](#custom-model-deployment)).
-
----
-
-## Usage
-
-### Starting the Application
-
-#### 1. Start Backend Server
-
-```bash
-# Using uv (recommended)
-PYTHONPATH=. uv run python -m uvicorn backend.app.main:app --port 8000
-
-# Or with auto-reload for development
-PYTHONPATH=. uv run python -m uvicorn backend.app.main:app --reload --port 8000
-```
-
-Backend available at: `http://localhost:8000`
-API Docs: `http://localhost:8000/docs`
-
-#### 2. Start Frontend Server
+Frontend:
 
 ```bash
 cd frontend
 npm run dev
 ```
 
-Frontend available at: `http://localhost:3000`
+Open `http://localhost:3000`. Backend docs are available at
+`http://localhost:8000/docs`.
 
-#### 3. (Optional) Start IAP Tunnel for Custom Model
-
-```bash
-gcloud compute start-iap-tunnel YOUR_INSTANCE_NAME 8000 \
-    --local-host-port=localhost:8001 \
-    --zone=YOUR_ZONE
-```
-
-### Using the Application
-
-1. Navigate to `http://localhost:3000`
-2. Upload your resume (PDF or TXT)
-3. Choose interview settings:
-   - **Mode**: HR / Technical / Mixed
-   - **Model**: API (cloud) or Custom (fine-tuned)
-   - **Questions**: 3-10 questions
-4. Start the interview
-5. Answer questions via text or voice
-6. Receive real-time feedback and follow-up questions
-7. Review your interview summary
-
-### Interview Modes
-
-| Mode | Focus | Question Style |
-|------|-------|----------------|
-| **HR** | Soft skills, leadership, teamwork | "Tell me about a time when..." |
-| **Tech** | Architecture, implementation, debugging | "Walk me through how you built..." |
-| **Mixed** | Balanced combination | Both styles |
-
----
-
-## Custom Model Deployment
-
-### GCP Setup
-
-1. **Create a GPU VM Instance**
+## Tests and quality checks
 
 ```bash
-gcloud compute instances create interview-model \
-    --zone=us-central1-a \
-    --machine-type=g2-standard-8 \
-    --accelerator=type=nvidia-l4,count=1 \
-    --image-family=pytorch-latest-gpu \
-    --image-project=deeplearning-platform-release \
-    --boot-disk-size=100GB \
-    --maintenance-policy=TERMINATE
+PYTHONPATH=. uv run --extra dev pytest tests/
+PYTHONPATH=. uv run --extra dev pytest tests/ \
+  --cov=backend.app.graph \
+  --cov=backend.app.api.routes.session \
+  --cov=backend.app.api.routes.websocket \
+  --cov=backend.app.api.routes.resume \
+  --cov=rag.retriever \
+  --cov-report=term-missing
+
+uv run --extra dev ruff check backend rag/retriever.py tests --config pyproject.toml
+uv run --extra dev black --check backend rag/retriever.py tests
+
+cd frontend
+npm test
+npx tsc --noEmit
+npm run lint
+npm run build
 ```
 
-2. **SSH into the Instance**
+The interactive graph smoke test uses mocks and does not require API keys:
 
 ```bash
-gcloud compute ssh interview-model --zone=us-central1-a
+PYTHONPATH=. uv run python scripts/test_graph.py
 ```
 
-3. **Install vLLM and Start Server**
+Dated verification results and limitations are recorded in
+[the roadmap](DEVELOPMENT_ROADMAP.md#verified-baseline-and-immediate-risks) and
+[the handoff](docs/REFACTOR_HANDOFF.md#verification-evidence). Passing checks are not
+proof that startup, scoring, recovery, or live providers work correctly.
 
-```bash
-pip install vllm
+## API overview
 
-# Start vLLM with LoRA adapter
-python -m vllm.entrypoints.openai.api_server \
-    --model mistralai/Mistral-7B-Instruct-v0.2 \
-    --enable-lora \
-    --lora-modules interview-lora=shubhampareek/interview-coach-lora \
-    --port 8000
-```
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/api/v1/resume/upload` | Parse and save a PDF/TXT resume |
+| GET | `/api/v1/resume/{resume_id}` | Resume summary |
+| DELETE | `/api/v1/resume/{resume_id}` | Delete resume data |
+| POST | `/api/v1/resume/{resume_id}/generate-questions` | Legacy standalone question generation |
+| GET | `/api/v1/resume/{resume_id}/chunks` | Legacy ChromaDB chunk inspection |
+| POST | `/api/v1/sessions` | Create session and generate first question |
+| GET | `/api/v1/sessions/{session_id}` | Current checkpointed state |
+| POST | `/api/v1/sessions/{session_id}/answer` | Submit an answer |
+| POST | `/api/v1/sessions/{session_id}/skip` | Skip current question |
+| POST | `/api/v1/sessions/{session_id}/end` | End early |
+| GET | `/api/v1/sessions/{session_id}/summary` | Interview summary |
+| DELETE | `/api/v1/sessions/{session_id}` | Delete checkpoint thread |
 
-4. **Create IAP Tunnel (Local Machine)**
+WebSocket endpoint: `/ws/interview/{session_id}`. Client message types are
+`start`, `answer`, `answer_audio`, `skip`, `end`, and `ping`.
 
-```bash
-gcloud compute start-iap-tunnel interview-model 8000 \
-    --local-host-port=localhost:8001 \
-    --zone=us-central1-a
-```
+Voice routes use the `/api/v1/voice` prefix. Text is the default UI and backend
+voice is disabled by default, matching `.env.example`. Disabled endpoints return
+503 without initializing voice providers. Chat recording requires reported STT
+availability; video links fall back to text unless STT and TTS are available.
+The retained voice adapters are experimental batch processing, not verified live
+voice support. ElevenLabs is not in the root dependency set. See the
+[voice decision](docs/decisions/0001-text-only-baseline.md) for limits.
 
-5. **Test Connection**
+## Model output boundary
 
-```bash
-curl http://localhost:8001/v1/models
-```
+Interview questions and evaluations must satisfy runtime contracts. Malformed or
+out-of-range evaluations do not become fallback scores; short answers reach the
+model instead of receiving a length-based penalty. The compact Custom/Hybrid
+evaluator reports unsupported until it can supply honest dimension judgments.
 
-### Using Custom Model
+REST and WebSocket responses expose a typed evaluation outcome, generation failure,
+current-question answer status, submitted draft and allowed actions. Reads and
+WebSocket connections project the same checkpoint without invoking a model. Evaluation
+failure keeps the active question and submitted text without a score; insufficient
+evidence shows the missing details. The user can explicitly submit a new answer, skip
+or end. Unsupported Custom/Hybrid evaluation permits skip/end rather than another
+unsupported submission.
 
-In the frontend, select "Custom Model" when starting an interview. The system will:
-1. Use Groq for preprocessing (resume summary, question generation)
-2. Use Custom Model for answer evaluation and follow-ups
+Failed question generation leaves the session pending with an explicit Start again
+control. Failed follow-up generation keeps the accepted answer and score, and permits
+skip/end rather than scoring it twice. Chat and video restore these outcomes on manual
+reconnect. Reconnect never resubmits a command. A valid score of zero is displayed as
+a score; infrastructure failures have none. The latest successful answer's evaluation
+survives reads/resume even when progression clears the current evaluation. The next
+mutating command clears that feedback; final valid feedback remains after completion.
+This is not a durable evaluation ledger.
 
----
+Provider metadata/timings and deterministic CI remain later M2 stages. These checks
+establish output validity and presentation, not judgment accuracy or retry safety. See the
+[contract decision and reading guide](docs/decisions/0003-model-output-contracts.md).
 
-## API Reference
+## Data and compatibility
 
-### Session Endpoints
+Runtime data is ignored by Git:
 
-#### Create Interview Session
-```http
-POST /api/v1/sessions
-Content-Type: application/json
+- `data/uploads/`
+- `data/parsed_resumes/*.md`
+- `data/chromadb/`
+- `data/interview_checkpoints.db`
 
-{
-  "resume_id": "resume_xyz123",
-  "mode": "tech",           // "hr", "tech", "mixed"
-  "model_type": "api",      // "api" or "custom"
-  "num_questions": 5,
-  "max_follow_ups": 3
-}
-```
+Only synthetic, explicitly documented fixtures may be committed. The owner requested
+removal of the old PDF/TXT samples, notebook and derived prompt export. Their origin
+remains unknown. Local and remote branch histories are sanitized, but five GitHub
+pull-request refs still retain historical copies pending host cleanup. See
+[the data inventory](docs/DATA_INVENTORY.md). Parser tests now create a temporary
+synthetic PDF instead of reading those samples.
 
-#### Submit Answer
-```http
-POST /api/v1/sessions/{session_id}/answer
-Content-Type: application/json
+Do not delete ChromaDB while legacy resume IDs are still needed. New resumes do
+not create embeddings; the legacy embedder is initialized lazily only for an old
+resume with no Markdown representation.
 
-{
-  "answer": "I built a microservices architecture using..."
-}
-```
+## Learning-oriented refactor
 
-### WebSocket Interview
+Follow [DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md), which supersedes the previous
+M0–M8 plan with an evidence-gated M0–M9 plan:
 
-```javascript
-const ws = new WebSocket('ws://localhost:8000/ws/interview/{session_id}');
+1. M0: system ownership, data provenance and voice support baseline.
+2. M1–M2: correct text interview, validated model contracts and deterministic CI.
+3. M3–M4: human-reviewed benchmark, durable feedback and coaching report.
+4. M5–M6: retry/restart recovery and product/dependency simplification.
+5. M7–M8: optional JD targeting and adaptive-selection experiment.
+6. M9: controlled deployment; does not depend on optional M7/M8.
 
-// Send answer
-ws.send(JSON.stringify({
-  type: "answer",
-  content: "My response..."
-}));
+No functional refactor is complete merely because the plan is documented. Public beta
+and real-user data processing remain blocked until M9 passes. A local synthetic-data
+demo can be a useful portfolio result at M4 without adding optional technologies.
 
-// Receive question/follow-up
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  // data.type: "question" | "follow_up" | "complete"
-  // data.content: The interviewer's response
-  // data.data.evaluation: Score and gap analysis
-};
-```
-
----
-
-## Development
-
-### Running Tests
-
-```bash
-# Backend tests
-PYTHONPATH=. uv run pytest tests/
-
-# With coverage
-PYTHONPATH=. uv run pytest tests/ --cov=backend --cov=rag
-```
-
-### Code Quality
-
-```bash
-# Format
-uv run black backend/ rag/
-
-# Lint
-uv run ruff check backend/ rag/
-
-# Type check
-uv run mypy backend/ rag/
-```
-
-### Adding Dependencies
-
-```bash
-# Add a new package
-uv add package-name
-
-# Add dev dependency
-uv add --dev package-name
-```
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-#### "Custom model not available"
-- Ensure IAP tunnel is running: `gcloud compute start-iap-tunnel ...`
-- Check if vLLM server is running on GCP instance
-- Verify `CUSTOM_MODEL_URL` in `.env`
-
-#### HR mode asking technical questions
-- Ensure you're using the latest `retriever.py` that handles both `"hr"` and `"behavioral"` values
-
-#### Voice features not working
-- Check `VOICE_ENABLED=true` in `.env`
-- Verify Deepgram and ElevenLabs API keys
-- Check browser microphone permissions
-
-#### ChromaDB errors
-- Delete `data/chromadb/` and restart to reinitialize
-- Check disk space
-
-#### WebSocket connection failed
-- Ensure backend is running on port 8000
-- Check CORS settings in `.env`
-
-### Debug Mode
-
-```bash
-# Enable debug logging in .env
-DEBUG=true
-
-# View detailed logs
-PYTHONPATH=. uv run python -m uvicorn backend.app.main:app --port 8000 --log-level debug
-```
-
----
-
-## License
-
-MIT License - see LICENSE file for details.
-
----
-
-## Acknowledgments
-
-- Fine-tuned LoRA model: [shubhampareek/interview-coach-lora](https://huggingface.co/shubhampareek/interview-coach-lora)
-- Base model: [Mistral-7B-Instruct-v0.2](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2)
-- Grilling methodology: "Requirements Elicitation Follow-Up Question Generation" paper
-
----
-
-Made with 🔥 by the Resume Griller team
+For work on another machine or with another coding agent, begin with
+[docs/REFACTOR_HANDOFF.md](docs/REFACTOR_HANDOFF.md).

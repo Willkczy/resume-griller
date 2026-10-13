@@ -23,7 +23,7 @@ export function ResumeUploader() {
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [selectedMode, setSelectedMode] = useState<InterviewMode>('mixed');
-  const [selectedUIMode, setSelectedUIMode] = useState<UIMode>('video');
+  const [selectedUIMode, setSelectedUIMode] = useState<UIMode>('chat');
   const [selectedModelType, setSelectedModelType] = useState<ModelType>('api');  // ⭐ 新增
   const [numQuestions, setNumQuestions] = useState(5);
   const [isStarting, setIsStarting] = useState(false);

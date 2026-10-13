@@ -3,207 +3,68 @@ base_model: mistralai/Mistral-7B-Instruct-v0.2
 library_name: peft
 pipeline_tag: text-generation
 tags:
-- base_model:adapter:mistralai/Mistral-7B-Instruct-v0.2
-- lora
-- sft
-- transformers
-- trl
+  - experimental
+  - lora
+  - peft
 ---
 
-# Model Card for Model ID
+# Interview Coach LoRA — Incomplete Experimental Artifact
 
-<!-- Provide a quick summary of what the model is/does. -->
+## Status
 
+This directory is **not a runnable or validated model release**. It contains tokenizer
+and adapter configuration metadata, but no adapter weight file such as
+`adapter_model.safetensors` or `adapter_model.bin`.
 
+Do not load it from the backend, publish it as a completed model, or use it to score
+interview candidates.
 
-## Model Details
+## Known metadata
 
-### Model Description
+- Declared base model: `mistralai/Mistral-7B-Instruct-v0.2`
+- Adapter library: PEFT
+- Intended task family: text generation
+- Intended project context: experimental interview coaching
 
-<!-- Provide a longer summary of what this model is. -->
+## Missing release evidence
 
+The repository does not provide:
 
+- adapter weights;
+- training code or immutable training configuration;
+- dataset or data card;
+- dataset consent, provenance, filtering, or PII policy;
+- train/validation/test split definitions;
+- training metrics or hardware record;
+- benchmark results against the current API models;
+- slice, bias, safety, or prompt-injection evaluation;
+- intended-use validation or a production integration path.
 
-- **Developed by:** [More Information Needed]
-- **Funded by [optional]:** [More Information Needed]
-- **Shared by [optional]:** [More Information Needed]
-- **Model type:** [More Information Needed]
-- **Language(s) (NLP):** [More Information Needed]
-- **License:** [More Information Needed]
-- **Finetuned from model [optional]:** [More Information Needed]
+Because those items are absent, quality, language support, limitations, license
+compatibility, and reproducibility are unknown.
 
-### Model Sources [optional]
+## Allowed use
 
-<!-- Provide the basic links for the model. -->
+The current files may be inspected as historical experiment metadata only. Any future
+model work must create a new, versioned experiment with a complete model card and pass
+the fine-tuning gate in `ml/README.md` and `DEVELOPMENT_ROADMAP.md`.
 
-- **Repository:** [More Information Needed]
-- **Paper [optional]:** [More Information Needed]
-- **Demo [optional]:** [More Information Needed]
+## Out-of-scope use
 
-## Uses
+- hiring or employment decisions;
+- candidate ranking;
+- unsupervised scoring of real people;
+- processing real resumes without consent and an approved data policy;
+- production inference or fallback routing.
 
-<!-- Address questions around how the model is intended to be used, including the foreseeable users of the model and those affected by the model. -->
+## Future release requirements
 
-### Direct Use
+A replacement model card must document at least:
 
-<!-- This section is for the model use without fine-tuning or plugging into a larger ecosystem/app. -->
-
-[More Information Needed]
-
-### Downstream Use [optional]
-
-<!-- This section is for the model use when fine-tuned for a task, or when plugged into a larger ecosystem/app -->
-
-[More Information Needed]
-
-### Out-of-Scope Use
-
-<!-- This section addresses misuse, malicious use, and uses that the model will not work well for. -->
-
-[More Information Needed]
-
-## Bias, Risks, and Limitations
-
-<!-- This section is meant to convey both technical and sociotechnical limitations. -->
-
-[More Information Needed]
-
-### Recommendations
-
-<!-- This section is meant to convey recommendations with respect to the bias, risk, and technical limitations. -->
-
-Users (both direct and downstream) should be made aware of the risks, biases and limitations of the model. More information needed for further recommendations.
-
-## How to Get Started with the Model
-
-Use the code below to get started with the model.
-
-[More Information Needed]
-
-## Training Details
-
-### Training Data
-
-<!-- This should link to a Dataset Card, perhaps with a short stub of information on what the training data is all about as well as documentation related to data pre-processing or additional filtering. -->
-
-[More Information Needed]
-
-### Training Procedure
-
-<!-- This relates heavily to the Technical Specifications. Content here should link to that section when it is relevant to the training procedure. -->
-
-#### Preprocessing [optional]
-
-[More Information Needed]
-
-
-#### Training Hyperparameters
-
-- **Training regime:** [More Information Needed] <!--fp32, fp16 mixed precision, bf16 mixed precision, bf16 non-mixed precision, fp16 non-mixed precision, fp8 mixed precision -->
-
-#### Speeds, Sizes, Times [optional]
-
-<!-- This section provides information about throughput, start/end time, checkpoint size if relevant, etc. -->
-
-[More Information Needed]
-
-## Evaluation
-
-<!-- This section describes the evaluation protocols and provides the results. -->
-
-### Testing Data, Factors & Metrics
-
-#### Testing Data
-
-<!-- This should link to a Dataset Card if possible. -->
-
-[More Information Needed]
-
-#### Factors
-
-<!-- These are the things the evaluation is disaggregating by, e.g., subpopulations or domains. -->
-
-[More Information Needed]
-
-#### Metrics
-
-<!-- These are the evaluation metrics being used, ideally with a description of why. -->
-
-[More Information Needed]
-
-### Results
-
-[More Information Needed]
-
-#### Summary
-
-
-
-## Model Examination [optional]
-
-<!-- Relevant interpretability work for the model goes here -->
-
-[More Information Needed]
-
-## Environmental Impact
-
-<!-- Total emissions (in grams of CO2eq) and additional considerations, such as electricity usage, go here. Edit the suggested text below accordingly -->
-
-Carbon emissions can be estimated using the [Machine Learning Impact calculator](https://mlco2.github.io/impact#compute) presented in [Lacoste et al. (2019)](https://arxiv.org/abs/1910.09700).
-
-- **Hardware Type:** [More Information Needed]
-- **Hours used:** [More Information Needed]
-- **Cloud Provider:** [More Information Needed]
-- **Compute Region:** [More Information Needed]
-- **Carbon Emitted:** [More Information Needed]
-
-## Technical Specifications [optional]
-
-### Model Architecture and Objective
-
-[More Information Needed]
-
-### Compute Infrastructure
-
-[More Information Needed]
-
-#### Hardware
-
-[More Information Needed]
-
-#### Software
-
-[More Information Needed]
-
-## Citation [optional]
-
-<!-- If there is a paper or blog post introducing the model, the APA and Bibtex information for that should go in this section. -->
-
-**BibTeX:**
-
-[More Information Needed]
-
-**APA:**
-
-[More Information Needed]
-
-## Glossary [optional]
-
-<!-- If relevant, include terms and calculations in this section that can help readers understand the model or model card. -->
-
-[More Information Needed]
-
-## More Information [optional]
-
-[More Information Needed]
-
-## Model Card Authors [optional]
-
-[More Information Needed]
-
-## Model Card Contact
-
-[More Information Needed]
-### Framework versions
-
-- PEFT 0.18.0
+1. developer, license, base-model revision, adapter revision, and code commit;
+2. intended and prohibited uses;
+3. dataset lineage, consent, redaction, language, occupation, and seniority slices;
+4. training configuration, hardware, duration, seed, and checkpoint selection;
+5. benchmark protocol and comparisons with API baselines;
+6. quality, calibration, safety, bias, latency, and cost results;
+7. known limitations, monitoring, rollback, and deletion procedures.

@@ -36,10 +36,8 @@ export class InterviewWebSocket {
         };
 
         this.ws.onmessage = (event) => {
-          console.log('[WS] Raw message received:', event.data);
           try {
             const message: WSMessage = JSON.parse(event.data);
-            console.log('[WS] Parsed message:', message);
             this.messageHandlers.forEach((handler) => handler(message));
           } catch (error) {
             console.error('[WS] Failed to parse message:', error);
@@ -74,7 +72,6 @@ export class InterviewWebSocket {
   send(message: WSClientMessage): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       const json = JSON.stringify(message);
-      console.log('[WS] Sending:', json);
       this.ws.send(json);
     } else {
       console.error('[WS] Cannot send - not connected. ReadyState:', this.ws?.readyState);
