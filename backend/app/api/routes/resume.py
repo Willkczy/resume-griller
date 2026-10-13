@@ -17,6 +17,7 @@ from backend.app.api.deps import (
 )
 from backend.app.config import settings
 from backend.app.models.model_outputs import QuestionBatch, parse_questions
+from backend.app.models.resume_id import InvalidResumeId, ResumeId, resume_file_path
 from backend.app.models.schemas import (
     GeneratedQuestion,
     GenerateQuestionsRequest,
@@ -69,7 +70,7 @@ async def upload_resume(
     # Generate resume ID and save file
     resume_id = generate_resume_id(file.filename)
     upload_dir = ensure_upload_dir()
-    file_path = upload_dir / f"{resume_id}{Path(file.filename).suffix}"
+    file_path = resume_file_path(upload_dir, resume_id, Path(file.filename).suffix)
 
     try:
         # Save uploaded file
@@ -113,7 +114,7 @@ async def upload_resume(
 
 @router.get("/{resume_id}", response_model=ResumeSummary)
 async def get_resume_summary(
-    resume_id: str,
+    resume_id: ResumeId,
     retriever: InterviewRetriever = Depends(get_retriever),
 ):
     """Get summary information for a processed resume."""
@@ -136,6 +137,8 @@ async def get_resume_summary(
             education_count=summary.get("education_count", 0),
         )
 
+    except InvalidResumeId as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except HTTPException:
         raise
     except Exception as e:
@@ -147,13 +150,17 @@ async def get_resume_summary(
 
 @router.delete("/{resume_id}")
 async def delete_resume(
-    resume_id: str,
+    resume_id: ResumeId,
     retriever: InterviewRetriever = Depends(get_retriever),
 ):
     """Delete a resume and its embeddings."""
     try:
         # Delete parsed resume file
-        parsed_path = Path(settings.PARSED_RESUME_DIR) / f"{resume_id}.md"
+        parsed_path = resume_file_path(settings.PARSED_RESUME_DIR, resume_id, ".md")
+        upload_paths = [
+            resume_file_path(settings.UPLOAD_DIR, resume_id, f".{ext}")
+            for ext in settings.ALLOWED_EXTENSIONS
+        ]
         had_parsed_resume = parsed_path.exists()
         if had_parsed_resume:
             os.remove(parsed_path)
@@ -166,15 +173,15 @@ async def delete_resume(
                 pass  # May not exist in ChromaDB
 
         # Delete uploaded file if exists
-        upload_dir = ensure_upload_dir()
-        for ext in settings.ALLOWED_EXTENSIONS:
-            file_path = upload_dir / f"{resume_id}.{ext}"
+        for file_path in upload_paths:
             if file_path.exists():
                 os.remove(file_path)
                 break
 
         return {"message": f"Resume {resume_id} deleted successfully"}
 
+    except InvalidResumeId as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -186,7 +193,7 @@ async def delete_resume(
     "/{resume_id}/generate-questions", response_model=GenerateQuestionsResponse
 )
 async def generate_questions(
-    resume_id: str,
+    resume_id: ResumeId,
     request: GenerateQuestionsRequest,
     retriever: InterviewRetriever = Depends(get_retriever),
     llm: BaseLLMService = Depends(get_llm),
@@ -199,7 +206,10 @@ async def generate_questions(
     LangGraph question-generation node with the complete parsed resume instead.
     """
     # Verify resume exists
-    summary = retriever.get_resume_summary(resume_id)
+    try:
+        summary = retriever.get_resume_summary(resume_id)
+    except InvalidResumeId as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if summary["total_chunks"] == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -263,7 +273,7 @@ Question prompt version: standalone-questions-v2.
 
 @router.get("/{resume_id}/chunks")
 async def get_resume_chunks(
-    resume_id: str,
+    resume_id: ResumeId,
     section: str = None,
     retriever: InterviewRetriever = Depends(get_retriever),
 ):

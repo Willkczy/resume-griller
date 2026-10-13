@@ -26,6 +26,7 @@ from backend.app.graph.state import (
 from backend.app.graph.transitions import CommandError
 from backend.app.middleware.rate_limit import limiter
 from backend.app.models.interview import InterviewSnapshot
+from backend.app.models.resume_id import InvalidResumeId, ResumeId
 from rag.retriever import InterviewRetriever
 
 # ============== Request/Response Schemas ==============
@@ -34,7 +35,7 @@ from rag.retriever import InterviewRetriever
 class SessionCreateRequest(BaseModel):
     """Request to create a new interview session."""
 
-    resume_id: str
+    resume_id: ResumeId
     mode: str = Field(default="mixed", pattern="^(hr|tech|mixed)$")
     model_type: str = Field(default="api", pattern="^(api|custom)$")
     focus_areas: list[str] = Field(default_factory=list)
@@ -164,7 +165,10 @@ async def create_session(
     compact evaluation reports unsupported until it meets the M2 contract.
     """
     # Verify resume exists
-    full_resume_text = retriever.get_full_resume_text(request.resume_id)
+    try:
+        full_resume_text = retriever.get_full_resume_text(request.resume_id)
+    except InvalidResumeId as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not full_resume_text:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -177,11 +181,10 @@ async def create_session(
         try:
             from backend.app.services.llm_service import LLMServiceFactory
 
-            resume_text = retriever.get_full_resume_text(request.resume_id)
             hybrid_service = LLMServiceFactory.get_hybrid_service()
             prepared_context = await hybrid_service.prepare_interview_context(
                 session_id=request.resume_id,  # temporary, real session_id set below
-                resume_text=resume_text,
+                resume_text=full_resume_text,
                 mode=request.mode,
                 num_questions=request.num_questions,
             )

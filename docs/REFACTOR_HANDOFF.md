@@ -1,6 +1,6 @@
 # Refactor handoff
 
-Last updated: 2026-10-10.
+Last updated: 2026-10-13.
 
 ## Start here
 
@@ -19,8 +19,9 @@ The owner authorized isolated rewriting, then the five remote branch updates and
 local adoption on 2026-09-20. Those actions are complete. The owner subsequently
 authorized local implementation commits; see the commit record below. On 2026-10-10
 the owner authorized pushing the latest work and updating GitHub to reflect project
-status. This publication slice does not start M2 stage 4, authorize deployment, or
-resume the deferred external Support request.
+status. On 2026-10-13 the owner authorized fixing the PR review findings, merging
+PR #6 and continuing M2 stage 4. Deployment and the deferred Support request remain
+outside that authorization.
 
 M0's local synthetic-data baseline, clean setup, and local/remote-branch history
 sanitation are verified. Five GitHub PR refs still retain historical artifacts.
@@ -34,7 +35,7 @@ real-user processing remain blocked by M9; resolve retained PR data before relea
 |---|---|---|---|
 | M0 | Local baseline accepted for M1; host cleanup deferred by owner | Pending / not assessed | Five GitHub PR refs still retain data; release/distribution issue remains open |
 | M1 | Engineering complete | Pending / not assessed | 73 tests passed at M1; real graph/engine integration, lifecycle parity and active-turn evidence below |
-| M2 | Stages 1–3 complete; stopped for owner review | Pending / not assessed | Runtime/public contracts and outcome UI implemented; metadata and CI remain open |
+| M2 | Stages 1–3 and PR review corrections complete; stage 4 authorized | Pending / not assessed | Resume storage regressions pass; metadata/timings and CI remain open |
 | M3 | Not started; Jev comparison planned after M2 | Not recorded | No human-reviewed benchmark yet |
 | M4 | Not started | Not recorded | No evaluation ledger/report yet |
 | M5 | Not started | Not recorded | Retry/restart guarantees not established |
@@ -43,14 +44,16 @@ real-user processing remain blocked by M9; resolve retained PR data before relea
 | M8 | Not selected | Not recorded | Optional; depends on M7 |
 | M9 | Not started | Not recorded | Real-user/public-beta gate remains closed |
 
-## Current scope: M2 stage 3 complete; stop for review
+## Current scope: merge reviewed corrections, then M2 stage 4
 
 The owner authorized M2 with a local commit and a stop between each stage, then
 explicitly delegated stage 3. Stages 1–3 enforce runtime/public model contracts,
 remove fabricated fallback scores, halt progression on unavailable evaluation and
 restore outcomes/submitted drafts through the UI. Provider metadata/timings and CI
-remain open. See the latest stage record and decision 0003. Resume with stage 4
-after the owner continues. Learning remains separately pending.
+remain open. The 2026-10-13 review findings are fixed with synthetic regressions;
+see the correction record below. The owner authorized merging PR #6 and then
+implementing stage 4, with the existing review stop afterward. Learning remains
+separately pending.
 
 On 2026-09-22 the owner requested adding the Jev comparison to the plan and stated
 they would return to finish M2 first. That September planning update performed no
@@ -125,10 +128,11 @@ provider key; live new-upload parsing needs the configured Groq credential.
 Suggested prompt for the next agent:
 
 > Read the roadmap and this handoff; inspect the current worktree. Implementation is
-> delegated, and learning is tracked separately. M1 and M2 stages 1–3 engineering
-> are complete. M0 host cleanup is explicitly deferred. Resume M2 stage 4 only after
-> the owner continues, and stop for review afterward. Preserve runtime data and
-> existing worktree changes.
+> delegated, and learning is tracked separately. M1 and M2 stages 1–3 are implemented.
+> The 2026-10-13 review corrections are verified. The owner authorized merging PR #6
+> and continuing M2 stage 4. Inspect the latest delivery record before acting; stop
+> for review after stage 4. M0 host cleanup remains deferred. Preserve runtime data
+> and existing edits.
 
 ## Record after each implementation slice
 
@@ -727,3 +731,77 @@ no self-referential commit identity is embedded here.
 - Exact next implementation step remains M2 stage 4 after the owner continues, then
   stage 5 deterministic CI. M3/Jev is planned only. Deployment, deferred Support
   cleanup and runtime-data migration/deletion were not performed; M9 remains closed.
+
+## 2026-10-13 — Review draft PR #6 and reassess the next step
+
+- Owner requested review and plan status. Agent scope: inspect the PR diff and
+  roadmap, rerun deterministic checks, reproduce suspected defects and record evidence.
+  Reviewed PR head `b31c26329178ba7ab38c7b24ae9c66d8e49fcda1`, which matched the local
+  checkout and remained unchanged on the final remote read. GitHub reported an open,
+  mergeable draft with no CI checks/statuses or review comments. Mergeability is not
+  correctness evidence. Existing machine-local settings changes were preserved.
+- Three actionable findings, all reproduced using newly authored temporary synthetic
+  files or mocked Chroma metadata; no live provider or runtime-data access:
+  - **P1: resume path containment.** `POST /api/v1/sessions` with resume ID
+    `../review-note` or an absolute filename stem returned 200 and passed a synthetic
+    Markdown file outside the configured parsed directory to the mocked LLM.
+    `rag/retriever.py:get_full_resume_text` joins an unrestricted ID directly to the
+    directory. Validate IDs and resolved path containment before reading or invoking
+    a provider; cover traversal, absolute paths and normal/legacy IDs. This is an
+    immediate correction under the roadmap's early-security rule, not work to defer
+    merely because M9 also includes path containment.
+  - **P2: legacy summary regression.** With flat Chroma metadata containing
+    `skills_list="Python, FastAPI"`, one experience chunk and one education chunk,
+    `GET /api/v1/resume/{id}` returned empty skills and zero counts. The route now
+    reads those fields from a summary, but `_summary_from_chunks` does not provide
+    them. Preserve the previous metadata extraction in the legacy projection.
+  - **P2: Markdown education boundary.** Two synthetic `###` degree entries under
+    `## EDUCATION` returned an education count of one, or zero with a blank line
+    before the first entry. The `\n##` section terminator also matches `###` headings.
+    Match the next level-two heading and test multiple entries and blank lines.
+- Fresh checks: backend pytest **211 passed** with five existing SWIG warnings;
+  Ruff and Black passed for backend, retriever, tests and graph smoke script;
+  mocked graph start/answer/follow-up/skip/end passed. Frontend **10 fixtures passed**,
+  TypeScript with incremental output disabled and ESLint passed. Production build
+  passed after granting the local compiler worker's required port access; the first
+  sandboxed attempt failed on that port restriction. Existing browser-mapping advisory
+  remains. PR diff and final handoff whitespace checks passed.
+- No new browser/device, clean-install, coverage or live model-quality run. The
+  reproductions reveal gaps in the existing green suite, not a measured model-quality
+  delta. No prompt/rubric/schema/model change was made. Only this handoff was edited;
+  no fix, commit, push, GitHub review submission, merge or deployment occurred.
+- Owner learning remains pending/not assessed and separate from engineering eligibility.
+  Retain the stage 3 exercise: predict score availability/actions for valid zero,
+  insufficient evidence, malformed output and timeout, then trace graph to UI.
+  The correction exercise is to trace resume ID -> file path -> provider prompt and
+  compare expected summary metadata across the two storage formats.
+- Recommendation: keep PR #6 draft, fix the three findings with focused regressions,
+  then continue M2 stage 4 metadata/timings/safe logging and stage 5 deterministic CI.
+  M2 is incomplete; do not start M3/Jev yet. M0 host cleanup remains deferred, M4–M6
+  remain unstarted, M7/M8 remain optional/unselected, and M9 remains closed.
+
+## 2026-10-13 — Correct PR #6 resume storage findings
+
+- Owner explicitly requested the fixes, PR #6 merge and subsequent M2 stage 4.
+  Agent scope: all three review corrections, regression tests and delivery.
+  Owner exercise: trace resume ID -> validated path -> provider prompt, and compare
+  summary metadata across Markdown and legacy storage. Learning remains pending.
+- Added a shared resume-ID/path boundary. Rejects traversal, absolute/Windows path
+  syntax, control characters and symlink escapes before reading or parsing. Safe
+  legacy stems with spaces, dots and Unicode remain supported. Session creation
+  rejects invalid access with 422 before a model call. Read/write/delete paths use
+  the same containment check; deletion validates every target before removing any.
+  No migration or deletion of existing runtime data was performed.
+- Legacy summaries again project skills and experience/education counts. Markdown
+  education sections now end at level-two headings, preserving multiple degrees
+  and blank lines. Synthetic fixture revision: `resume-storage-review-v1`.
+- Backend suite: **227 passed**, including 16 new storage/route regressions; five
+  existing SWIG warnings. Ruff and Black checks passed. `git diff --check` passed.
+  The immediately preceding review's frontend build/types/lint/10 fixtures and mock
+  graph smoke remain applicable: this slice changes only backend resume access and
+  summaries. No live providers, device tests, runtime payloads or model-quality run.
+  Prompt/rubric/schema behavior is unchanged; the three reproduced defects now have
+  passing regressions, not an AI-quality benchmark delta.
+- Exact next action: publish this correction commit and merge PR #6 as authorized,
+  preserving the staged learning history, then implement M2 stage 4 and stop for
+  review. Stage 5 CI and M3/Jev remain unstarted; M0 host cleanup remains deferred.

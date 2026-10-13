@@ -66,6 +66,30 @@ def test_http_session_start_runs_real_graph(interview):
     assert len(detail["conversation"]) == 1
 
 
+@pytest.mark.parametrize("kind", ["relative", "absolute", "symlink"])
+def test_session_rejects_resume_escape_before_model_call(
+    interview, tmp_path, monkeypatch, kind
+):
+    parsed_dir = tmp_path / "parsed"
+    monkeypatch.setattr(settings, "PARSED_RESUME_DIR", str(parsed_dir))
+    retriever = InterviewRetriever()
+    interview.client.app.dependency_overrides[get_retriever] = lambda: retriever
+    outside = tmp_path / "private-note.md"
+    outside.write_text("Synthetic non-resume note", encoding="utf-8")
+    (parsed_dir / "link.md").symlink_to(outside)
+    resume_id = {
+        "relative": "../private-note",
+        "absolute": str(outside.with_suffix("")),
+        "symlink": "link",
+    }[kind]
+    response = interview.client.post(
+        "/api/v1/sessions", json={"resume_id": resume_id, "num_questions": 1}
+    )
+    assert response.status_code == 422
+    interview.llm.generate.assert_not_awaited()
+    assert outside.read_text() == "Synthetic non-resume note"
+
+
 @pytest.mark.asyncio
 async def test_invalid_graph_action_with_null_error_returns_text():
     graph = build_interview_graph().compile(checkpointer=MemorySaver())

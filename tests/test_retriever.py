@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from backend.app.config import settings
+from backend.app.models.resume_id import InvalidResumeId
 from rag.retriever import InterviewRetriever
 
 
@@ -84,3 +85,76 @@ async def test_llm_failures_are_normalized(parsed_dir, monkeypatch):
 
     with pytest.raises(RuntimeError, match="service failed"):
         await retriever._parse_with_llm("resume text")
+
+
+# Synthetic storage regressions: resume-storage-review-v1.
+@pytest.mark.parametrize(
+    "resume_id", ["../outside", "/tmp/outside", r"..\outside", "C:outside", "a\x00b"]
+)
+def test_resume_ids_cannot_be_paths(parsed_dir, resume_id):
+    factory = Mock()
+    retriever = InterviewRetriever(embedder_factory=factory)
+    for read in (retriever.get_full_resume_text, retriever.get_resume_summary):
+        with pytest.raises(InvalidResumeId):
+            read(resume_id)
+    factory.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_symlink_escape_rejected_before_read_write_or_provider(
+    parsed_dir, tmp_path, monkeypatch
+):
+    factory = Mock()
+    retriever = InterviewRetriever(embedder_factory=factory)
+    outside = tmp_path / "outside.md"
+    outside.write_text("Synthetic private note", encoding="utf-8")
+    (parsed_dir / "link.md").symlink_to(outside)
+    parse = AsyncMock()
+    monkeypatch.setattr(retriever, "_parse_with_llm", parse)
+    for read in (retriever.get_full_resume_text, retriever.get_resume_summary):
+        with pytest.raises(InvalidResumeId):
+            read("link")
+    with pytest.raises(InvalidResumeId):
+        await retriever.process_resume(str(tmp_path / "unused.txt"), "link")
+    parse.assert_not_awaited()
+    factory.assert_not_called()
+    assert outside.read_text() == "Synthetic private note"
+
+
+@pytest.mark.parametrize("resume_id", ["legacy resume.v1", "履歷_2026-10-13"])
+def test_safe_legacy_filename_stems_remain_supported(parsed_dir, resume_id):
+    retriever = InterviewRetriever()
+    (parsed_dir / f"{resume_id}.md").write_text("Synthetic resume", encoding="utf-8")
+    assert retriever.get_full_resume_text(resume_id) == "Synthetic resume"
+
+
+@pytest.mark.parametrize("spacing", ["", "\n"])
+def test_markdown_counts_all_degrees_until_next_section(parsed_dir, spacing):
+    retriever = InterviewRetriever()
+    (parsed_dir / "synthetic.md").write_text(
+        "# CANDIDATE: Synthetic Candidate\n\n## EDUCATION\n"
+        + spacing
+        + "### BS, Synthetic University (2020)\n"
+        "### MS, Synthetic University (2022)\n\n"
+        "## PROJECTS\n### Synthetic queue\n",
+        encoding="utf-8",
+    )
+    assert retriever.get_resume_summary("synthetic")["education_count"] == 2
+
+
+def test_legacy_summary_preserves_flat_chroma_metadata(parsed_dir):
+    embedder = Mock()
+    embedder.get_all_chunks.return_value = [
+        {
+            "content": "Skills",
+            "metadata": {"section": "skills", "skills_list": "Python, FastAPI"},
+        },
+        {"content": "Job", "metadata": {"section": "experience"}},
+        {"content": "Degree", "metadata": {"section": "education"}},
+        {"content": "Degree 2", "metadata": {"section": "education"}},
+    ]
+    summary = InterviewRetriever(embedder=embedder).get_resume_summary("legacy")
+    assert summary["skills"] == ["Python", "FastAPI"]
+    assert summary["experience_count"] == 1
+    assert summary["education_count"] == 2
+    assert summary["total_chunks"] == 4

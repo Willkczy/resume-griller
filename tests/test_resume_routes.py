@@ -8,6 +8,7 @@ from fastapi import HTTPException, UploadFile
 from backend.app.api.routes import resume
 from backend.app.config import settings
 from backend.app.models.schemas import GenerateQuestionsRequest, QuestionType
+from rag.retriever import InterviewRetriever
 
 
 @pytest.fixture
@@ -95,6 +96,45 @@ async def test_delete_markdown_resume_without_initializing_legacy(upload_dir, tm
     assert result["message"].startswith("Resume resume-1")
     assert not parsed.exists()
     assert not (upload_dir / "resume-1.txt").exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_rejects_external_symlink_before_removing_any_file(
+    upload_dir, tmp_path
+):
+    parsed_dir = tmp_path / "parsed"
+    parsed_dir.mkdir()
+    parsed = parsed_dir / "resume-1.md"
+    parsed.write_text("Synthetic resume", encoding="utf-8")
+    outside = tmp_path / "outside.txt"
+    outside.write_text("Synthetic unrelated file", encoding="utf-8")
+    upload_dir.mkdir()
+    (upload_dir / "resume-1.txt").symlink_to(outside)
+    retriever = Mock()
+    with pytest.raises(HTTPException) as rejected:
+        await resume.delete_resume("resume-1", retriever)
+    assert rejected.value.status_code == 422
+    assert parsed.read_text() == "Synthetic resume"
+    assert outside.read_text() == "Synthetic unrelated file"
+    retriever.embedder._delete_resume.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_legacy_summary_route_retains_skills_and_counts(upload_dir):
+    embedder = Mock()
+    embedder.get_all_chunks.return_value = [
+        {
+            "content": "Skills",
+            "metadata": {"section": "skills", "skills_list": "Python, FastAPI"},
+        },
+        {"content": "Job", "metadata": {"section": "experience"}},
+        {"content": "Degree", "metadata": {"section": "education"}},
+    ]
+    result = await resume.get_resume_summary(
+        "legacy", InterviewRetriever(embedder=embedder)
+    )
+    assert result.skills == ["Python", "FastAPI"]
+    assert result.experience_count == result.education_count == 1
 
 
 @pytest.mark.asyncio

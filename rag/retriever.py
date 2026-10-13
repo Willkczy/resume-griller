@@ -13,6 +13,7 @@ from pathlib import Path
 import pdfplumber
 
 from backend.app.config import settings
+from backend.app.models.resume_id import resume_file_path
 
 # ============== LLM Resume Parsing Prompt ==============
 
@@ -90,6 +91,8 @@ class InterviewRetriever:
         if resume_id is None:
             resume_id = Path(file_path).stem
 
+        output_path = resume_file_path(self._parsed_dir, resume_id, ".md")
+
         # Step 1: Extract raw text from PDF/TXT
         raw_text = self._extract_text(file_path)
         if not raw_text.strip():
@@ -99,7 +102,6 @@ class InterviewRetriever:
         parsed_text = await self._parse_with_llm(raw_text)
 
         # Step 3: Save to disk
-        output_path = self._parsed_dir / f"{resume_id}.md"
         output_path.write_text(parsed_text, encoding="utf-8")
 
         print(
@@ -158,7 +160,7 @@ class InterviewRetriever:
         Fallback: reassemble from ChromaDB chunks (old resumes)
         """
         # Try LLM-parsed file first
-        parsed_path = self._parsed_dir / f"{resume_id}.md"
+        parsed_path = resume_file_path(self._parsed_dir, resume_id, ".md")
         if parsed_path.exists():
             text = parsed_path.read_text(encoding="utf-8")
             print(f"[Retriever] Loaded parsed resume: {resume_id} ({len(text)} chars)")
@@ -200,7 +202,7 @@ class InterviewRetriever:
 
     def get_resume_summary(self, resume_id: str) -> dict:
         """Get a summary of the processed resume."""
-        parsed_path = self._parsed_dir / f"{resume_id}.md"
+        parsed_path = resume_file_path(self._parsed_dir, resume_id, ".md")
         if parsed_path.exists():
             return self._summary_from_parsed(resume_id, parsed_path)
 
@@ -240,14 +242,14 @@ class InterviewRetriever:
         # Count experience entries
         experience_count = len(re.findall(r"^### .+ at .+", text, re.MULTILINE))
 
-        # Count education entries
-        education_count = len(
-            re.findall(r"(?<=## EDUCATION\n)(?:### .+\n?)+", text, re.MULTILINE)
+        # A degree heading is level three; only another level-two section ends it.
+        edu_section = re.search(
+            r"^## EDUCATION[^\S\n]*\n(.*?)(?=^##[ \t]+|\Z)",
+            text,
+            re.DOTALL | re.MULTILINE,
         )
-        # Simpler: count ### under EDUCATION
-        edu_section = re.search(r"## EDUCATION\n(.*?)(?:\n##|\Z)", text, re.DOTALL)
         education_count = (
-            len(re.findall(r"^###", edu_section.group(1), re.MULTILINE))
+            len(re.findall(r"^###[ \t]+", edu_section.group(1), re.MULTILINE))
             if edu_section
             else 0
         )
@@ -267,17 +269,38 @@ class InterviewRetriever:
         """Fallback: summary from ChromaDB chunks."""
         chunks = self.embedder.get_all_chunks(resume_id)
         sections = {}
+        skills = []
+        experience_count = 0
+        education_count = 0
+        name = None
         for chunk in chunks:
-            section = chunk.get("metadata", {}).get("section", "unknown")
+            metadata = chunk.get("metadata", {})
+            section = metadata.get("section", "unknown")
             if section not in sections:
                 sections[section] = []
             sections[section].append(chunk.get("content", "")[:100])
+            if section == "skills":
+                skills.extend(
+                    skill.strip()
+                    for skill in metadata.get("skills_list", "").split(",")
+                    if skill.strip()
+                )
+            elif section == "experience":
+                experience_count += 1
+            elif section == "education":
+                education_count += 1
+            elif section == "overview" and isinstance(metadata.get("contact"), dict):
+                name = metadata["contact"].get("name")
 
         return {
             "resume_id": resume_id,
             "total_chunks": len(chunks),
             "sections": list(sections.keys()),
             "preview": sections,
+            "name": name,
+            "skills": skills[:20],
+            "experience_count": experience_count,
+            "education_count": education_count,
         }
 
     def build_prompt(
