@@ -3,8 +3,8 @@
 Plan adopted: 2026-09-10. Assessment performed: 2026-09-09.
 Status: planning complete; implementation gates remain open.
 
-Current progress as of 2026-10-10: M1 engineering and M2 stages 1–3 are complete;
-M2 metadata/timings and deterministic CI remain open. Owner learning is separately
+Current progress as of 2026-10-13: M1 engineering and M2 stages 1–4 are complete;
+M2 stage 5 deterministic CI remains open. PR #6 is merged. Owner learning is separately
 pending. See [the handoff](docs/REFACTOR_HANDOFF.md) for current evidence and the
 exact next slice. The baseline findings and initial status table below are historical.
 

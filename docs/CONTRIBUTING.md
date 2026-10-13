@@ -196,3 +196,15 @@ Do not add a new technology or start an optional track solely to match a job pos
 On a new machine, fetch/switch to the pushed branch, preserve local edits, and verify
 status before installing dependencies. Copy environment examples only when the local
 files do not exist. Credentials and runtime data are not transferred through Git.
+
+
+### Model execution diagnostics
+
+`tests/test_model_execution.py` uses synthetic text and actual SDK response schemas
+with mocked transports. It covers nullable usage, provider identity, deadlines,
+concurrent-call isolation, finish-reason rejection, safe logs and checkpoint/transport
+parity. No provider key or network call is required. Inspect `model_executions` in a
+synthetic session response to correlate an application `call_id` with safe logs.
+Do not enable SDK request-body logging or log model inputs/outputs when debugging.
+See [decision 0003](decisions/0003-model-output-contracts.md) for counter semantics,
+metadata lifetime and the pending owner exercise.

@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.models.gap_types import GapType
+from backend.app.models.model_execution import ModelExecution
 from backend.app.models.model_outputs import (
     DimensionScores,
     InsufficientEvidence,
@@ -15,7 +16,7 @@ from backend.app.models.model_outputs import (
     UnsupportedMode,
 )
 
-PUBLIC_INTERVIEW_SCHEMA_VERSION = "interview-outcome-v1"
+PUBLIC_INTERVIEW_SCHEMA_VERSION = "interview-outcome-v2"
 
 
 class EvaluationIdentity(BaseModel):
@@ -120,6 +121,7 @@ class InterviewSnapshot(BaseModel):
     conversation: list[ConversationMessage]
     created_at: str
     updated_at: str
+    model_executions: list[ModelExecution] = Field(default_factory=list)
     evaluation: PublicEvaluation | None = None
     generation_failure: GenerationFailure | None = None
     draft_answer: str | None = None

@@ -117,6 +117,7 @@ class InterviewState(TypedDict, total=False):
     response_type: Literal["question", "follow_up", "complete", "error"] | None
     response_content: str | None
     response_data: dict | None
+    model_executions: list[dict]  # Latest command only; not the M4 ledger
     response_evaluation: dict | None  # Latest command output; not evaluation history
 
     # ─── Input Signal (set by route handler BEFORE invoking graph) ───
@@ -186,6 +187,7 @@ def create_initial_state(
         response_content=None,
         response_data=None,
         response_evaluation=None,
+        model_executions=[],
         # Input — will be set by route handler before each invocation
         action=None,
         error=None,

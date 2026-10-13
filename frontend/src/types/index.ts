@@ -75,6 +75,33 @@ export interface SessionSummary {
 
 // ============== Interview Response Types ==============
 
+export interface ModelExecution {
+  schema_version: 'model-execution-v1';
+  call_id: string;
+  operation: 'question_generation' | 'evaluation' | 'follow_up_generation'
+    | 'resume_parsing' | 'resume_summary' | 'question_context';
+  provider: 'anthropic' | 'openai' | 'gemini' | 'groq' | 'custom' | null;
+  configured_model: string | null;
+  model: string | null;
+  provider_request_id: string | null;
+  trace_id: string | null;
+  usage: {
+    input_tokens: number | null;
+    output_tokens: number | null;
+    total_tokens: number | null;
+    cache_read_input_tokens: number | null;
+    cache_creation_input_tokens: number | null;
+  };
+  cost_usd: number | null;
+  finish_reason: string | null;
+  latency_ms: number;
+  prompt_version: string;
+  rubric_version: string | null;
+  output_schema_version: string | null;
+  outcome: 'valid' | 'insufficient_evidence' | 'invalid_output' | 'provider_failure';
+  error_code: string | null;
+}
+
 export type InterviewAction = 'start' | 'answer' | 'skip' | 'end';
 export type AnswerStatus = 'none' | 'unscored' | 'accepted';
 
@@ -154,6 +181,7 @@ export interface GenerationFailure {
 
 /** Authoritative checkpoint projection shared by REST and WebSocket commands. */
 export interface InterviewSnapshot {
+  model_executions: ModelExecution[];
   session_id: string;
   resume_id: string;
   mode: string;

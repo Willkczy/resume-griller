@@ -28,9 +28,9 @@ latest LangGraph checkpoint. The active turn stores its exact prompt, question I
 parent main-question ID; reads and reconnects return that turn. A single pure policy
 chooses follow-up versus advance. See the [command/turn decision](docs/decisions/0002-interview-commands-and-turns.md).
 
-As of 2026-10-10, M1 engineering and M2 stages 1–3 are complete: runtime model-output
-validation and public outcome handling are implemented. M2 remains incomplete. The
-next slice is stage 4 provider metadata and safe timings/logging, followed by stage 5
+As of 2026-10-13, PR #6 is merged and M1 engineering and M2 stages 1–4 are complete:
+runtime model-output validation, public outcomes and provider execution metadata are
+implemented. M2 remains incomplete. The next slice after review is stage 5
 deterministic CI. Owner learning remains pending. Durable evaluation history and
 retry/concurrency guarantees remain unfinished. Passing deterministic tests does not
 establish model quality. See
@@ -207,8 +207,16 @@ survives reads/resume even when progression clears the current evaluation. The n
 mutating command clears that feedback; final valid feedback remains after completion.
 This is not a durable evaluation ledger.
 
-Provider metadata/timings and deterministic CI remain later M2 stages. These checks
-establish output validity and presentation, not judgment accuracy or retry safety. See the
+The checkpoint also exposes `model_executions` for the latest mutating command:
+provider, configured and reported model, usage, finish reason, call/request IDs,
+prompt/rubric/schema versions, outcome and monotonic call latency. Missing usage,
+cost and external trace identity remain null; reads/reconnect reuse the same records.
+These records are bounded command metadata, not session totals or an evaluation ledger.
+Non-streaming LLM calls have a configurable total deadline
+(`LLM_REQUEST_TIMEOUT_SECONDS`) and no automatic SDK retries. Logs exclude prompt,
+resume, answer, audio, raw responses and exception text. Explicit incomplete/blocked
+finish reasons reject an otherwise parseable result. Deterministic CI remains stage 5.
+These checks establish output validity and presentation, not judgment accuracy or retry safety. See the
 [contract decision and reading guide](docs/decisions/0003-model-output-contracts.md).
 
 ## Data and compatibility

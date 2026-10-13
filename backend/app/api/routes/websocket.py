@@ -15,12 +15,15 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from fastapi.websockets import WebSocketState
 
 from backend.app.config import settings
+from backend.app.core.logging_config import get_logger
 from backend.app.graph import get_compiled_graph
 from backend.app.graph.commands import execute_command, load_session_state
 from backend.app.graph.public import websocket_data
 from backend.app.graph.transitions import CommandError, command_error
 from backend.app.services.stt_service import get_stt_service
 from backend.app.services.tts_service import get_tts_service
+
+logger = get_logger(__name__)
 
 router = APIRouter(tags=["websocket"])
 
@@ -102,8 +105,8 @@ async def generate_voice_response(text: str, voice_enabled: bool = True) -> str 
         tts = get_tts_service()
         result = await tts.synthesize(text)
         return result.audio_base64
-    except Exception as e:
-        print(f"TTS Generation failed: {e}")
+    except Exception:
+        logger.warning("speech_synthesis_unavailable")
         return None
 
 
@@ -305,8 +308,8 @@ async def interview_websocket(
                     msg_type = WSMessageType.ANSWER
                     content = text_answer
 
-                except Exception as e:
-                    print(f"STT Error: {e}")
+                except Exception:
+                    logger.warning("transcription_unavailable")
                     current_state = await load_session_state(graph, session_id)
                     await websocket.send_json(
                         create_ws_message(
@@ -344,13 +347,10 @@ async def interview_websocket(
                 break
 
     except WebSocketDisconnect:
-        print(f"Client disconnected: {session_id}")
+        logger.info("websocket_disconnected")
 
-    except Exception as e:
-        print(f"WebSocket error: {e}")
-        import traceback
-
-        traceback.print_exc()
+    except Exception:
+        logger.warning("websocket_command_failed")
         try:
             current_state = await load_session_state(graph, session_id)
             await websocket.send_json(

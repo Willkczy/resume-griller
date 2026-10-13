@@ -9,6 +9,9 @@ from dataclasses import dataclass
 import httpx
 
 from backend.app.config import settings
+from backend.app.core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -82,9 +85,7 @@ class DeepgramSTTService:
                 )
 
                 if response.status_code != 200:
-                    print(
-                        f"Deepgram API error: {response.status_code} - {response.text}"
-                    )
+                    logger.warning("transcription_unavailable")
                     return TranscriptionResult(
                         text="",
                         confidence=0.0,
@@ -113,8 +114,8 @@ class DeepgramSTTService:
                     duration_seconds=duration,
                 )
 
-        except Exception as e:
-            print(f"Deepgram transcription error: {e}")
+        except Exception:
+            logger.warning("transcription_unavailable")
             return TranscriptionResult(
                 text="",
                 confidence=0.0,

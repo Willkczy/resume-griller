@@ -9,6 +9,22 @@ from typing import Any
 import structlog
 
 
+def suppress_provider_payload_logs() -> None:
+    """Override SDK debug flags, including SDKs imported after app startup."""
+    prefixes = (
+        "openai",
+        "anthropic",
+        "groq",
+        "httpx",
+        "httpcore",
+        "google",
+        "elevenlabs",
+    )
+    for name in set(prefixes) | set(logging.Logger.manager.loggerDict):
+        if any(name == prefix or name.startswith(prefix + ".") for prefix in prefixes):
+            logging.getLogger(name).setLevel(logging.WARNING)
+
+
 def configure_logging(debug: bool = False) -> None:
     """
     Configure structured logging for the application.
@@ -25,6 +41,9 @@ def configure_logging(debug: bool = False) -> None:
         stream=sys.stdout,
         level=log_level,
     )
+
+    # SDK request logs may contain prompts, credentials or provider bodies.
+    suppress_provider_payload_logs()
 
     # Configure structlog
     structlog.configure(

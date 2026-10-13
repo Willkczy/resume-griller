@@ -113,8 +113,10 @@ handoff with engineering evidence and owner learning status separately.
   insufficient evidence and unsupported compact evaluation have no score and do not
   advance the interview. Public outcome unions and dedicated UI restore submitted
   drafts and failures from the checkpoint on manual reconnect. Allowed actions come
-  from the shared command guard; reconnect does not resubmit. Provider metadata and
-  deterministic CI are still M2 work.
+  from the shared command guard; reconnect does not resubmit. Stage 4 captures
+  application-owned execution metadata and safe timings in `model_executions` for
+  the latest command. Missing usage/cost stay null; no SDK automatic retries.
+  Deterministic CI remains M2 stage 5.
 - Full resume text is stored in state but evaluation prompts truncate context.
 - Voice is batch-based and disabled by default in settings and `.env.example`.
   The root dependency set lacks ElevenLabs; live voice remains experimental.

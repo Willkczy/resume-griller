@@ -48,8 +48,12 @@ from backend.app.graph.state import (
     make_question_turn,
 )
 from backend.app.graph.transitions import command_error
-from backend.app.models.model_outputs import QuestionBatch, parse_questions
-from backend.app.services.model_failures import provider_failure
+from backend.app.models.model_outputs import (
+    MODEL_OUTPUT_SCHEMA_VERSION,
+    QuestionBatch,
+    parse_questions,
+)
+from backend.app.services.model_execution import call_model
 
 QUESTION_PROMPT_VERSION = "question-generation-v2"
 
@@ -131,8 +135,10 @@ async def generate_questions(state: InterviewState, config: RunnableConfig) -> d
     num_questions = state["num_questions"]
     focus_areas = state.get("focus_areas", [])
 
+    records = []
     prepared = state.get("prepared_context")
     if model_type == "custom" and prepared is not None:
+        records = prepared.get("model_executions") or []
         # Prepared data must satisfy the same contract, not bypass validation.
         result = parse_questions(
             json.dumps({"questions": prepared.get("questions")}),
@@ -144,20 +150,24 @@ async def generate_questions(state: InterviewState, config: RunnableConfig) -> d
             f"Focus areas: {json.dumps(focus_areas)}\n"
             f"RESUME:\n{state.get('full_resume_text', '')}"
         )
-        try:
-            response = await services.llm.generate(
-                prompt=prompt,
-                system_prompt=_build_question_generation_prompt(mode, num_questions),
-                temperature=0.85,
-                max_tokens=2000,
-            )
-        except Exception as exc:
-            result = provider_failure(exc)
-        else:
-            result = parse_questions(response, expected_count=num_questions)
+        call = await call_model(
+            services.llm,
+            operation="question_generation",
+            prompt_version=QUESTION_PROMPT_VERSION,
+            output_schema_version=MODEL_OUTPUT_SCHEMA_VERSION,
+            prompt=prompt,
+            system_prompt=_build_question_generation_prompt(mode, num_questions),
+            temperature=0.85,
+            max_tokens=2000,
+        )
+        result = call.failure or parse_questions(
+            call.text, expected_count=num_questions
+        )
+        call.record("valid" if isinstance(result, QuestionBatch) else result, records)
     if not isinstance(result, QuestionBatch):
         return {
             **model_unavailable("question_generation", result),
+            "model_executions": records,
             "status": "pending",
             "generation_failure": {
                 "operation": "question_generation",
@@ -166,6 +176,7 @@ async def generate_questions(state: InterviewState, config: RunnableConfig) -> d
         }
     return {
         "questions": result.questions,
+        "model_executions": records,
         "status": "asking",
         "error": None,
         "generation_failure": None,
@@ -276,6 +287,7 @@ async def evaluate_answer(state: InterviewState, config: RunnableConfig) -> dict
     # Call GrillingEngine to evaluate the answer
     # This is the core grilling logic — detects gaps across 18 types,
     # scores across 7 dimensions, and suggests follow-ups.
+    records = []
     evaluation = await services.grilling_engine.evaluate_answer(
         question=question,
         answer=answer,
@@ -284,6 +296,7 @@ async def evaluate_answer(state: InterviewState, config: RunnableConfig) -> dict
         conversation_history=conversation_history,
         follow_up_count=follow_up_count,
         question_index=state["current_question_index"],
+        execution_records=records,
     )
 
     if not isinstance(evaluation, AnswerEvaluation):
@@ -291,6 +304,7 @@ async def evaluate_answer(state: InterviewState, config: RunnableConfig) -> dict
         # A later explicit submission is a new attempt, not an automatic retry.
         return {
             **model_unavailable("evaluation", evaluation),
+            "model_executions": records,
             "current_evaluation": {
                 **evaluation.model_dump(mode="json"),
                 "question_id": active["question_id"],
@@ -303,6 +317,7 @@ async def evaluate_answer(state: InterviewState, config: RunnableConfig) -> dict
 
     return {
         "active_question": active,
+        "model_executions": records,
         "current_evaluation": {
             **evaluation.to_dict(),
             "question_id": active["question_id"],
@@ -358,17 +373,20 @@ async def generate_follow_up(state: InterviewState, config: RunnableConfig) -> d
     ]
 
     # Generate follow-up question via GrillingEngine
+    records = list(state.get("model_executions", []))
     follow_up = await services.grilling_engine.generate_follow_up(
         question=question,
         answer=answer,
         evaluation=evaluation,
         conversation_history=conversation_history,
         question_type=mode,
+        execution_records=records,
     )
 
     if not isinstance(follow_up, str):
         return {
             **model_unavailable("follow_up_generation", follow_up),
+            "model_executions": records,
             "status": "asking",
             "current_evaluation": {
                 **state["current_evaluation"],
@@ -404,6 +422,7 @@ async def generate_follow_up(state: InterviewState, config: RunnableConfig) -> d
 
     return {
         "active_question": next_turn,
+        "model_executions": records,
         "current_follow_up_count": new_count,
         "status": "asking",
         "generation_failure": None,
