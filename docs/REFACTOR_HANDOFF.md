@@ -1,6 +1,6 @@
 # Refactor handoff
 
-Last updated: 2026-10-13.
+Last updated: 2026-10-15.
 
 ## Start here
 
@@ -20,8 +20,8 @@ local adoption on 2026-09-20. Those actions are complete. The owner subsequently
 authorized local implementation commits; see the commit record below. On 2026-10-10
 the owner authorized pushing the latest work and updating GitHub to reflect project
 status. On 2026-10-13 the owner authorized fixing the PR review findings, merging
-PR #6 and continuing M2 stage 4. Deployment and the deferred Support request remain
-outside that authorization.
+PR #6 and continuing M2 stage 4. On 2026-10-15 the owner requested M2 stage 5.
+Deployment and the deferred Support request remain outside that authorization.
 
 M0's local synthetic-data baseline, clean setup, and local/remote-branch history
 sanitation are verified. Five GitHub PR refs still retain historical artifacts.
@@ -35,7 +35,7 @@ real-user processing remain blocked by M9; resolve retained PR data before relea
 |---|---|---|---|
 | M0 | Local baseline accepted for M1; host cleanup deferred by owner | Pending / not assessed | Five GitHub PR refs still retain data; release/distribution issue remains open |
 | M1 | Engineering complete | Pending / not assessed | 73 tests passed at M1; real graph/engine integration, lifecycle parity and active-turn evidence below |
-| M2 | Stages 1–4 complete; stopped for stage review | Pending / not assessed | PR #6 merged; execution metadata verified; stage 5 CI remains open |
+| M2 | Stages 1–5 implemented; hosted CI verification pending | Pending / not assessed | Clean local gate passes; publish the draft and verify both hosted jobs |
 | M3 | Not started; Jev comparison planned after M2 | Not recorded | No human-reviewed benchmark yet |
 | M4 | Not started | Not recorded | No evaluation ledger/report yet |
 | M5 | Not started | Not recorded | Retry/restart guarantees not established |
@@ -44,15 +44,16 @@ real-user processing remain blocked by M9; resolve retained PR data before relea
 | M8 | Not selected | Not recorded | Optional; depends on M7 |
 | M9 | Not started | Not recorded | Real-user/public-beta gate remains closed |
 
-## Current scope: review M2 stage 4, then authorize stage 5
+## Current scope: M2 stage 5 CI verification and review
 
-The owner authorized M2 with a local commit and a stop between each stage, then
-explicitly delegated stage 3. On 2026-10-13 they authorized fixing the review findings,
-merging PR #6 and continuing stage 4. All three corrections are merged. Stages 1–4
-now enforce model/public contracts, preserve non-scored outcomes and submitted drafts,
-and record provider execution metadata with safe timings/logging. Stage 4 is locally
-committed for review; it has not been pushed or merged. Stage 5 deterministic CI is
-next after owner review/authorization. Learning remains separately pending.
+The owner authorized M2 with a commit and a stop between each stage, then explicitly
+delegated stage 3. PR #6 and all review corrections are merged. Stage 4 is implemented
+in local commit `ecfe8c4`; on 2026-10-15 the owner requested stage 5. Both backend and
+frontend CI jobs are now configured, and the exact commands pass in a fresh temporary
+checkout with locked dependencies and isolated fixtures. Hosted success is still pending.
+Publish stages 4–5 as a draft PR to exercise the actual workflow, verify its proposed
+revision, then stop for owner review before merge or M3. Learning remains separately
+pending; continuing a stage does not establish owner understanding.
 
 On 2026-09-22 the owner requested adding the Jev comparison to the plan and stated
 they would return to finish M2 first. That September planning update performed no
@@ -68,8 +69,8 @@ that work; do not treat it as an implementation dependency for M1 or as resolved
 ## Remaining engineering limitations
 
 - Model outputs have runtime/public validation and dedicated non-scored outcome UI.
-  Execution metadata/timings are implemented; deterministic CI remains M2. Custom/Hybrid compact
-  evaluation is explicitly unsupported, not scalar-derived.
+  Execution metadata/timings and CI configuration are implemented; hosted verification
+  remains pending. Custom/Hybrid compact evaluation is explicitly unsupported.
 - The latest accepted feedback survives advancement until the next mutating command;
   there is no durable per-turn evaluation ledger and reports remain count-based (M4).
 - Sequential validation is not atomic concurrency control or idempotency (M5).
@@ -113,8 +114,8 @@ history for their implementation scope. No new sensitive runtime artifacts are i
 
 ## New-machine workflow
 
-PR #6 is merged into the default branch. Stage 4 is local until separately published;
-inspect the latest delivery record and `git status` before continuing on another machine.
+PR #6 is merged into the default branch. Inspect the latest delivery record and draft
+PR for publication/CI status of stages 4–5, and `git status` before using another machine.
 For an existing clone, fetch and fast-forward the intended branch after preserving local
 edits. Runtime files are not transferred by those Git operations.
 
@@ -128,10 +129,10 @@ Suggested prompt for the next agent:
 
 > Read the roadmap and this handoff; inspect the current worktree. Implementation is
 > delegated, and learning is tracked separately. PR #6 and its review corrections are
-> merged. M1 and M2 stages 1–4 are implemented; stage 4 is locally committed and stopped
-> for review. The next slice is stage 5 deterministic CI after owner authorization.
-> Do not start M3/Jev automatically. M0 host cleanup remains deferred. Preserve runtime
-> data and existing edits.
+> merged. M1 and M2 stages 1–5 are implemented. Inspect the latest stage 5 delivery/CI
+> evidence; complete hosted verification if still pending, then stop for owner review.
+> Do not merge or begin M3/Jev automatically. M0 host cleanup remains deferred.
+> Preserve runtime data and existing edits.
 
 ## Record after each implementation slice
 
@@ -858,3 +859,48 @@ no self-referential commit identity is embedded here.
   no new PR or push was made. Exact next step: review this stage and explicitly resume
   stage 5 deterministic CI. M2 is incomplete; M3/Jev, M4 ledger and M5 recovery remain
   unstarted, M0 host cleanup deferred, optional M7/M8 unselected and M9 closed.
+
+
+## 2026-10-15 — M2 stage 5: deterministic CI and isolated tests
+
+- Owner requested stage 5. Agent scope: CI wiring, offline test isolation, clean setup
+  rehearsal, final M2 acceptance mapping, commit/draft delivery and hosted verification.
+  Owner exercise stated before implementation: explain which failure each job catches,
+  why a swallowed network attempt must still fail, and why green mocked tests do not
+  establish evaluator quality. Learning remains pending/not assessed.
+- Added `.github/workflows/ci.yml`: independent backend/frontend jobs on pushes, PRs and
+  manual dispatch; bounded job time; read-only repository permission; immutable action
+  release commits; lock-keyed dependency caches; cancelled superseded runs. Installs use
+  `uv sync --locked --extra dev` and `npm ci`. Backend runs full pytest/contract fixtures,
+  Ruff, Black and mock graph smoke. Frontend runs outcome fixtures, TypeScript without
+  incremental output, ESLint and production build. No provider secrets, runtime-data
+  artifacts or deployment steps. Merge protection is a separate repository setting.
+- Added `tests/conftest.py` to isolate before collection: ignore dotenv via Pydantic's
+  public `_env_file` argument, clear provider credentials, select temporary runtime/cache
+  paths, disable voice/custom health probes/tracing and prevent model downloads. The
+  autouse DNS/socket guard permits Unix sockets and rejects outbound network attempts
+  during tests, including at teardown when application code swallows the exception.
+  Existing LLM/STT/TTS/Chroma calls remain explicitly mocked. Fixture revision
+  `ci-isolation-v1` adds six regressions for isolation and swallowed DNS/connect attempts.
+- Local suite: **280 backend tests passed** (274 prior + six isolation cases). Verified
+  fresh Python/npm installs in a temporary Git-archive checkout plus this stage's files,
+  with no `.env`, `.env.local`, inherited provider credentials, node_modules, model
+  cache or virtualenv from the working checkout. Lock freshness passed; exact workflow
+  commands passed: Ruff, Black, all 280 tests, graph smoke, **10 frontend fixtures**,
+  TypeScript, ESLint and production build. Actionlint validated workflow syntax;
+  `git diff --check` passed. Existing SWIG/Gemini deprecation and browser-mapping
+  advisories remain. npm also warned about optional dependency install-script policy;
+  install/build succeeded without manifest or dependency changes.
+- Local uv verification needed macOS system-configuration permission; the frontend
+  compiler needed local worker port access. These local sandbox restrictions do not
+  constitute hosted Linux verification. No browser/device/live-provider/model-quality
+  run was performed; no prompts, rubrics, model selections, output schemas or interview
+  behavior changed, so no new AI-quality delta is claimed. Dependency simplification
+  remains M6; the workflow still installs the root legacy ML runtime dependencies.
+- Updated README, roadmap, onboarding, contribution guide and decision 0003, including
+  a per-acceptance evidence map. Preserved historical milestone records and the local
+  settings edit. Runtime data, credentials and environment files were not changed.
+- Delivery checkpoint: commit this slice, publish stages 4–5 in a draft PR and verify
+  both real GitHub job results at its current revision. Hosted CI remains pending until
+  that evidence exists. Then stop for owner review before merge/M3. M0 cleanup remains
+  deferred, owner learning pending, M4–M6 unstarted, M7/M8 optional/unselected and M9 closed.

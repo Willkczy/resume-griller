@@ -28,12 +28,12 @@ latest LangGraph checkpoint. The active turn stores its exact prompt, question I
 parent main-question ID; reads and reconnects return that turn. A single pure policy
 chooses follow-up versus advance. See the [command/turn decision](docs/decisions/0002-interview-commands-and-turns.md).
 
-As of 2026-10-13, PR #6 is merged and M1 engineering and M2 stages 1–4 are complete:
-runtime model-output validation, public outcomes and provider execution metadata are
-implemented. M2 remains incomplete. The next slice after review is stage 5
-deterministic CI. Owner learning remains pending. Durable evaluation history and
-retry/concurrency guarantees remain unfinished. Passing deterministic tests does not
-establish model quality. See
+As of 2026-10-15, PR #6 is merged and M1 engineering and M2 stages 1–4 are complete.
+M2 stage 5 now implements deterministic CI with isolated backend tests and frontend
+contract/type/lint/build checks. Clean local rehearsal passes; hosted job evidence is
+recorded in the handoff after publication. Owner learning remains pending. Durable
+evaluation history and retry/concurrency guarantees remain unfinished. Passing
+deterministic tests does not establish model quality. See
 [the roadmap](DEVELOPMENT_ROADMAP.md) and [current handoff](docs/REFACTOR_HANDOFF.md)
 for acceptance evidence and next work.
 
@@ -215,7 +215,9 @@ These records are bounded command metadata, not session totals or an evaluation 
 Non-streaming LLM calls have a configurable total deadline
 (`LLM_REQUEST_TIMEOUT_SECONDS`) and no automatic SDK retries. Logs exclude prompt,
 resume, answer, audio, raw responses and exception text. Explicit incomplete/blocked
-finish reasons reject an otherwise parseable result. Deterministic CI remains stage 5.
+finish reasons reject an otherwise parseable result. The [CI workflow](.github/workflows/ci.yml)
+runs the deterministic backend and frontend checks; see the
+[contribution guide](docs/CONTRIBUTING.md#continuous-integration) to reproduce them.
 These checks establish output validity and presentation, not judgment accuracy or retry safety. See the
 [contract decision and reading guide](docs/decisions/0003-model-output-contracts.md).
 

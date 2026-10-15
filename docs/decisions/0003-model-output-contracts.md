@@ -1,6 +1,6 @@
 # 0003 — Explicit model output contracts
 
-Date: 2026-09-22. Updated: 2026-10-13. Status: stages 1–4 implemented; CI pending.
+Date: 2026-09-22. Updated: 2026-10-15. Status: stages 1–5 implemented; hosted evidence tracked in the handoff.
 
 ## Why
 
@@ -230,3 +230,50 @@ identity, then trace one timeout and one truncated response from `ModelResult` t
 call UUID is not an idempotency key and why a timeout has no score. Implementation was
 delegated; owner understanding remains pending/not assessed. Review this local stage
 before authorizing stage 5 CI. Do not start M3/Jev yet.
+
+
+## Stage 5 deterministic CI and acceptance evidence
+
+The owner authorized this stage on 2026-10-15. [The workflow](../../.github/workflows/ci.yml)
+defines independent backend and frontend jobs on push/PR/manual dispatch. Jobs have
+bounded execution time and read-only repository access; actions are pinned to verified
+release commits. No application/provider secrets, deployment, raw trace artifacts or
+runtime databases are part of the workflow. Python installs with `--locked` to reject
+manifest/lock drift, then checks run with `--frozen`; npm installs with `npm ci`.
+Runner/tool selections live in the workflow rather than duplicated guidance.
+The setup follows the official [uv](https://github.com/astral-sh/setup-uv) and
+[Node action](https://github.com/actions/setup-node) interfaces. Merge protection must
+be configured separately; CI configuration alone is not an enforced repository rule.
+
+`tests/conftest.py` sets test storage and cache paths before application imports, clears
+provider credentials and disables dotenv loading using Pydantic's public `_env_file`
+override. Model downloads and tracing are disabled. An autouse socket/DNS guard rejects
+network attempts during tests and checks again at teardown so swallowed provider errors
+cannot hide an attempted call. Asyncio's Unix sockets and in-process TestClient remain
+usable. The new synthetic `ci-isolation-v1` cases prove dotenv/credential/storage isolation
+and fail child pytest runs on DNS, connect, connect_ex and create_connection attempts.
+The guard supplements existing explicit LLM/STT/TTS/Chroma mocks; it is not an operating
+system firewall or a mechanism for running live-provider tests.
+
+| M2 acceptance item | Deterministic evidence |
+|---|---|
+| Malformed, missing, mistyped, unknown and invalid scores have no ordinary evaluation | `test_model_outputs.py`, `test_interview_flow.py` and public-schema fixtures |
+| Valid zero and insufficient evidence stay distinct from provider failure | `test_stage3_outcomes.py` plus frontend `interview-outcomes.test.mjs` |
+| Experimental modes report their evaluation limitation | Custom/Hybrid cases in `test_interview_flow.py` and `test_model_failures.py` |
+| Version/provider outcomes, incomplete finish reasons and safe logs | `test_model_execution.py` using SDK-shaped mocked results |
+| Deterministic backend and frontend CI commands | Workflow plus clean local rehearsal; hosted job results recorded in the handoff |
+| Owner explains rejection categories and diagnoses a response | Pending/not assessed; implementation was delegated |
+
+Backend CI includes the full test suite, Ruff, Black and the mocked graph smoke script.
+Frontend CI includes synthetic outcome fixtures, TypeScript, ESLint and production build.
+The clean rehearsal used fresh locked Python/npm installations, no dotenv files or
+provider credentials, and passed all steps. This stage changes test/CI infrastructure;
+prompts, rubrics, model-output schemas and interview behavior are unchanged, so there is
+no new AI behavior or quality delta. Existing fixture identities remain intact.
+
+Owner exercise: identify which job rejects a broken output contract versus a TypeScript
+error, explain why a caught provider network attempt fails teardown, then distinguish a
+green deterministic gate from evidence of evaluator correctness. Owner learning remains
+pending, independently of engineering checks. The next milestone is M3 only after stage
+review and successful hosted CI; begin with human-reviewed pilot labels and the planned
+Jev comparison, not an automatic interview-policy change.

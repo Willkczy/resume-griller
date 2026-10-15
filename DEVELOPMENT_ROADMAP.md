@@ -3,10 +3,10 @@
 Plan adopted: 2026-09-10. Assessment performed: 2026-09-09.
 Status: planning complete; implementation gates remain open.
 
-Current progress as of 2026-10-13: M1 engineering and M2 stages 1–4 are complete;
-M2 stage 5 deterministic CI remains open. PR #6 is merged. Owner learning is separately
-pending. See [the handoff](docs/REFACTOR_HANDOFF.md) for current evidence and the
-exact next slice. The baseline findings and initial status table below are historical.
+Current progress as of 2026-10-15: M1 engineering and M2 stages 1–4 are complete;
+stage 5 CI is implemented with clean local verification. Hosted job evidence is tracked
+in [the handoff](docs/REFACTOR_HANDOFF.md) after publication. Owner learning is separately
+pending. The baseline findings and initial status table below are historical.
 
 This is the canonical implementation plan. It supersedes the previous 12-week
 M0–M8 plan. Milestone numbers below have new meanings: do not use old chats or old
@@ -237,7 +237,7 @@ UI outcome for unavailable evaluation. Inspect which SDK metadata is actually av
 
 **Agent work:** Synchronize public schemas/types, mechanical adapter changes, malformed-
 output tests, CI wiring and documentation. Main files: GrillingEngine, LLM adapters,
-active API schemas, frontend types and `.github/workflows/` (to be created).
+active API schemas, frontend types and `.github/workflows/`.
 
 **Acceptance:**
 
