@@ -35,7 +35,7 @@ real-user processing remain blocked by M9; resolve retained PR data before relea
 |---|---|---|---|
 | M0 | Local baseline accepted for M1; host cleanup deferred by owner | Pending / not assessed | Five GitHub PR refs still retain data; release/distribution issue remains open |
 | M1 | Engineering complete | Pending / not assessed | 73 tests passed at M1; real graph/engine integration, lifecycle parity and active-turn evidence below |
-| M2 | Stages 1–5 implemented; hosted CI verification pending | Pending / not assessed | Clean local gate passes; publish the draft and verify both hosted jobs |
+| M2 | Engineering complete; draft PR #7 awaits review | Pending / not assessed | 280 backend tests, 10 frontend fixtures and both hosted CI jobs pass |
 | M3 | Not started; Jev comparison planned after M2 | Not recorded | No human-reviewed benchmark yet |
 | M4 | Not started | Not recorded | No evaluation ledger/report yet |
 | M5 | Not started | Not recorded | Retry/restart guarantees not established |
@@ -44,16 +44,16 @@ real-user processing remain blocked by M9; resolve retained PR data before relea
 | M8 | Not selected | Not recorded | Optional; depends on M7 |
 | M9 | Not started | Not recorded | Real-user/public-beta gate remains closed |
 
-## Current scope: M2 stage 5 CI verification and review
+## Current scope: review M2 stage 5
 
 The owner authorized M2 with a commit and a stop between each stage, then explicitly
-delegated stage 3. PR #6 and all review corrections are merged. Stage 4 is implemented
-in local commit `ecfe8c4`; on 2026-10-15 the owner requested stage 5. Both backend and
-frontend CI jobs are now configured, and the exact commands pass in a fresh temporary
-checkout with locked dependencies and isolated fixtures. Hosted success is still pending.
-Publish stages 4–5 as a draft PR to exercise the actual workflow, verify its proposed
-revision, then stop for owner review before merge or M3. Learning remains separately
-pending; continuing a stage does not establish owner understanding.
+delegated stage 3. PR #6 and all review corrections are merged. On 2026-10-15 the owner
+requested stage 5. Stages 4–5 are published in [draft PR #7](https://github.com/Willkczy/resume-griller/pull/7).
+Both backend and frontend jobs passed on implementation commit `d7d7e6e`, including
+fresh locked installs and deterministic fixtures on hosted Linux. M2 engineering is
+complete. Review the PR and its current revision's checks before merge; M3's human-reviewed
+benchmark/Jev comparison is next only when the owner continues. Learning remains
+separately pending; stage continuation and successful CI do not establish understanding.
 
 On 2026-09-22 the owner requested adding the Jev comparison to the plan and stated
 they would return to finish M2 first. That September planning update performed no
@@ -69,8 +69,8 @@ that work; do not treat it as an implementation dependency for M1 or as resolved
 ## Remaining engineering limitations
 
 - Model outputs have runtime/public validation and dedicated non-scored outcome UI.
-  Execution metadata/timings and CI configuration are implemented; hosted verification
-  remains pending. Custom/Hybrid compact evaluation is explicitly unsupported.
+  Execution metadata/timings and deterministic CI are implemented and verified.
+  Custom/Hybrid compact evaluation is explicitly unsupported.
 - The latest accepted feedback survives advancement until the next mutating command;
   there is no durable per-turn evaluation ledger and reports remain count-based (M4).
 - Sequential validation is not atomic concurrency control or idempotency (M5).
@@ -114,8 +114,9 @@ history for their implementation scope. No new sensitive runtime artifacts are i
 
 ## New-machine workflow
 
-PR #6 is merged into the default branch. Inspect the latest delivery record and draft
-PR for publication/CI status of stages 4–5, and `git status` before using another machine.
+PR #6 is merged into the default branch. Draft PR #7 contains stages 4–5 with hosted
+CI evidence. Inspect the latest delivery record, PR revision and `git status` before
+using another machine.
 For an existing clone, fetch and fast-forward the intended branch after preserving local
 edits. Runtime files are not transferred by those Git operations.
 
@@ -129,9 +130,9 @@ Suggested prompt for the next agent:
 
 > Read the roadmap and this handoff; inspect the current worktree. Implementation is
 > delegated, and learning is tracked separately. PR #6 and its review corrections are
-> merged. M1 and M2 stages 1–5 are implemented. Inspect the latest stage 5 delivery/CI
-> evidence; complete hosted verification if still pending, then stop for owner review.
-> Do not merge or begin M3/Jev automatically. M0 host cleanup remains deferred.
+> merged. M1 and M2 engineering are complete; draft PR #7 contains stages 4–5 and
+> successful hosted backend/frontend CI evidence. Stop for owner review before merge
+> or M3/Jev. Inspect the current PR revision before acting. M0 cleanup remains deferred.
 > Preserve runtime data and existing edits.
 
 ## Record after each implementation slice
@@ -904,3 +905,26 @@ no self-referential commit identity is embedded here.
   both real GitHub job results at its current revision. Hosted CI remains pending until
   that evidence exists. Then stop for owner review before merge/M3. M0 cleanup remains
   deferred, owner learning pending, M4–M6 unstarted, M7/M8 optional/unselected and M9 closed.
+
+
+### Stage 5 delivery and hosted acceptance verification
+
+- Published stage 4 commit `ecfe8c4` and stage 5 commit
+  `d7d7e6ecbd152bc8965bf6e9dc9f0a322351dfc4`; opened and attached
+  [draft PR #7](https://github.com/Willkczy/resume-griller/pull/7).
+  No merge or deployment. The separate machine-local settings edit remains excluded.
+- [PR-triggered CI run](https://github.com/Willkczy/resume-griller/actions/runs/38687399397)
+  passed both jobs at the implementation revision above. Backend logs confirm **280
+  tests passed**, Ruff/Black and graph smoke passed; frontend logs confirm **10 fixtures
+  passed**, TypeScript/lint and the production build passed. Read-only check diagnostics
+  were tied to the PR head revision. The push-triggered run also passed both jobs.
+- CI setup uses the existing lockfiles and full dependency graph. The hosted install,
+  job timeouts, pinned actions and cache post-steps all completed successfully on Linux.
+  These are now actual hosted results, separate from the clean macOS rehearsal.
+- Added this acceptance record after the successful run; its documentation commit
+  triggers another run. Inspect the latest PR revision's job conclusions before merge.
+  M2 engineering is complete and stopped for review. Owner learning remains pending;
+  this is not a claim of evaluator calibration, M4 ledger completion or M5 recovery.
+- Exact next step: owner review of draft PR #7 and its final checks, then merge or
+  explicitly continue to M3's pilot labeling/benchmark and planned Jev comparison.
+  M0 host cleanup remains deferred; M7/M8 unselected; M9 closed.

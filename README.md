@@ -28,12 +28,13 @@ latest LangGraph checkpoint. The active turn stores its exact prompt, question I
 parent main-question ID; reads and reconnects return that turn. A single pure policy
 chooses follow-up versus advance. See the [command/turn decision](docs/decisions/0002-interview-commands-and-turns.md).
 
-As of 2026-10-15, PR #6 is merged and M1 engineering and M2 stages 1–4 are complete.
-M2 stage 5 now implements deterministic CI with isolated backend tests and frontend
-contract/type/lint/build checks. Clean local rehearsal passes; hosted job evidence is
-recorded in the handoff after publication. Owner learning remains pending. Durable
-evaluation history and retry/concurrency guarantees remain unfinished. Passing
-deterministic tests does not establish model quality. See
+As of 2026-10-15, M1 and M2 engineering are complete. PR #6 is merged;
+[draft PR #7](https://github.com/Willkczy/resume-griller/pull/7) contains M2 stages 4–5
+for review, with both hosted CI jobs passing. CI checks isolated backend contracts
+and frontend fixtures/types/lint/build. Owner learning remains pending. The next
+eligible milestone after review is M3's human-reviewed benchmark/Jev comparison.
+Durable evaluation history and retry/concurrency guarantees remain unfinished.
+Passing deterministic tests does not establish model quality. See
 [the roadmap](DEVELOPMENT_ROADMAP.md) and [current handoff](docs/REFACTOR_HANDOFF.md)
 for acceptance evidence and next work.
 

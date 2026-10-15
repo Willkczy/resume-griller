@@ -3,10 +3,11 @@
 Plan adopted: 2026-09-10. Assessment performed: 2026-09-09.
 Status: planning complete; implementation gates remain open.
 
-Current progress as of 2026-10-15: M1 engineering and M2 stages 1–4 are complete;
-stage 5 CI is implemented with clean local verification. Hosted job evidence is tracked
-in [the handoff](docs/REFACTOR_HANDOFF.md) after publication. Owner learning is separately
-pending. The baseline findings and initial status table below are historical.
+Current progress as of 2026-10-15: M1 and M2 engineering are complete. Both hosted
+backend/frontend CI jobs pass for M2 stages 4–5 in draft PR #7, which awaits review.
+Owner learning is separately pending. M3's human-reviewed benchmark/Jev comparison is
+next after review and owner continuation. See [the handoff](docs/REFACTOR_HANDOFF.md)
+for exact evidence. The baseline findings and initial status table below are historical.
 
 This is the canonical implementation plan. It supersedes the previous 12-week
 M0–M8 plan. Milestone numbers below have new meanings: do not use old chats or old

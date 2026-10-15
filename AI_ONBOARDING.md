@@ -116,8 +116,8 @@ handoff with engineering evidence and owner learning status separately.
   from the shared command guard; reconnect does not resubmit. Stage 4 captures
   application-owned execution metadata and safe timings in `model_executions` for
   the latest command. Missing usage/cost stay null; no SDK automatic retries.
-  Stage 5 adds deterministic backend/frontend CI; inspect the handoff for hosted
-  verification and the pending owner exercise.
+  Stage 5 adds deterministic backend/frontend CI; both hosted jobs pass in the
+  draft PR. M2 engineering is complete and awaits review; owner learning remains pending.
 - Full resume text is stored in state but evaluation prompts truncate context.
 - Voice is batch-based and disabled by default in settings and `.env.example`.
   The root dependency set lacks ElevenLabs; live voice remains experimental.

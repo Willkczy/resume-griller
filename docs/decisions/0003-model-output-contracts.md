@@ -1,6 +1,6 @@
 # 0003 — Explicit model output contracts
 
-Date: 2026-09-22. Updated: 2026-10-15. Status: stages 1–5 implemented; hosted evidence tracked in the handoff.
+Date: 2026-09-22. Updated: 2026-10-15. Status: M2 engineering complete; hosted CI verified; review and owner learning pending.
 
 ## Why
 
@@ -261,13 +261,14 @@ system firewall or a mechanism for running live-provider tests.
 | Valid zero and insufficient evidence stay distinct from provider failure | `test_stage3_outcomes.py` plus frontend `interview-outcomes.test.mjs` |
 | Experimental modes report their evaluation limitation | Custom/Hybrid cases in `test_interview_flow.py` and `test_model_failures.py` |
 | Version/provider outcomes, incomplete finish reasons and safe logs | `test_model_execution.py` using SDK-shaped mocked results |
-| Deterministic backend and frontend CI commands | Workflow plus clean local rehearsal; hosted job results recorded in the handoff |
+| Deterministic backend and frontend CI commands | Workflow, clean local rehearsal and both hosted Linux jobs passing; run links in the handoff |
 | Owner explains rejection categories and diagnoses a response | Pending/not assessed; implementation was delegated |
 
 Backend CI includes the full test suite, Ruff, Black and the mocked graph smoke script.
 Frontend CI includes synthetic outcome fixtures, TypeScript, ESLint and production build.
 The clean rehearsal used fresh locked Python/npm installations, no dotenv files or
-provider credentials, and passed all steps. This stage changes test/CI infrastructure;
+provider credentials, and passed all steps. Both hosted Linux jobs subsequently passed
+on implementation commit `d7d7e6e`; see the dated handoff for run evidence. This stage changes test/CI infrastructure;
 prompts, rubrics, model-output schemas and interview behavior are unchanged, so there is
 no new AI behavior or quality delta. Existing fixture identities remain intact.
 
