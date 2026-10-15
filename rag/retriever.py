@@ -104,9 +104,6 @@ class InterviewRetriever:
         # Step 3: Save to disk
         output_path.write_text(parsed_text, encoding="utf-8")
 
-        print(
-            f"[Retriever] Processed resume: {resume_id} ({len(parsed_text)} chars) -> {output_path}"
-        )
         return resume_id
 
     def _extract_text(self, file_path: str) -> str:
@@ -129,25 +126,29 @@ class InterviewRetriever:
 
     async def _parse_with_llm(self, raw_text: str) -> str:
         """Call Groq LLM to parse raw resume text into structured markdown."""
+        from backend.app.models.model_outputs import InvalidOutput
         from backend.app.services.llm_service import LLMServiceFactory
+        from backend.app.services.model_execution import call_model
 
         llm = LLMServiceFactory.get_service(provider="groq")
         prompt = RESUME_PARSE_PROMPT.format(raw_text=raw_text)
 
-        try:
-            response = await llm.generate(
-                prompt=prompt,
-                system_prompt=(
-                    "You are a precise resume parser. "
-                    "Output only structured markdown."
-                ),
-                temperature=0.1,
-                max_tokens=3000,
-            )
-        except Exception as exc:
-            raise RuntimeError("Resume parsing service failed") from exc
-
-        parsed = response.strip()
+        call = await call_model(
+            llm,
+            operation="resume_parsing",
+            prompt_version="resume-markdown-v1",
+            prompt=prompt,
+            system_prompt="You are a precise resume parser. Output only structured markdown.",
+            temperature=0.1,
+            max_tokens=3000,
+        )
+        outcome = call.failure or (
+            "valid" if call.text.strip() else InvalidOutput(code="schema_violation")
+        )
+        call.record(outcome)
+        if call.failure:
+            raise RuntimeError("Resume parsing service failed")
+        parsed = call.text.strip()
         if not parsed:
             raise RuntimeError("Resume parsing service returned an empty result")
         return parsed
@@ -163,14 +164,12 @@ class InterviewRetriever:
         parsed_path = resume_file_path(self._parsed_dir, resume_id, ".md")
         if parsed_path.exists():
             text = parsed_path.read_text(encoding="utf-8")
-            print(f"[Retriever] Loaded parsed resume: {resume_id} ({len(text)} chars)")
             return text
 
         # Fallback: old ChromaDB-based reassembly
         if self.embedder:
             return self._get_full_text_from_chunks(resume_id)
 
-        print(f"[Retriever] No parsed resume found for: {resume_id}")
         return ""
 
     def _get_full_text_from_chunks(self, resume_id: str) -> str:
@@ -194,10 +193,8 @@ class InterviewRetriever:
                     text_parts.append(content)
 
             full_text = "\n\n".join(text_parts)
-            print(f"[Retriever] Fallback: reassembled from {len(sorted_chunks)} chunks")
             return full_text
-        except Exception as e:
-            print(f"[Retriever] Error in chunk fallback: {e}")
+        except Exception:
             return ""
 
     def get_resume_summary(self, resume_id: str) -> dict:

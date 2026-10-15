@@ -16,7 +16,12 @@ from backend.app.api.deps import (
     validate_file_extension,
 )
 from backend.app.config import settings
-from backend.app.models.model_outputs import QuestionBatch, parse_questions
+from backend.app.models.model_outputs import (
+    MODEL_OUTPUT_SCHEMA_VERSION,
+    ProviderFailure,
+    QuestionBatch,
+    parse_questions,
+)
 from backend.app.models.resume_id import InvalidResumeId, ResumeId, resume_file_path
 from backend.app.models.schemas import (
     GeneratedQuestion,
@@ -26,6 +31,7 @@ from backend.app.models.schemas import (
     ResumeUploadResponse,
 )
 from backend.app.services.llm_service import BaseLLMService
+from backend.app.services.model_execution import call_model
 from rag.retriever import InterviewRetriever
 
 router = APIRouter(prefix="/resume", tags=["resume"])
@@ -241,7 +247,11 @@ Question prompt version: standalone-questions-v2.
 """
 
         # Generate questions using LLM
-        response = await llm.generate(
+        call = await call_model(
+            llm,
+            operation="question_generation",
+            prompt_version="standalone-questions-v2",
+            output_schema_version=MODEL_OUTPUT_SCHEMA_VERSION,
             prompt=prompt,
             system_prompt=system_prompt,
             max_tokens=1024,
@@ -249,7 +259,14 @@ Question prompt version: standalone-questions-v2.
         )
 
         # Parse questions from response
-        parsed = parse_questions(response, expected_count=request.num_questions)
+        parsed = call.failure or parse_questions(
+            call.text, expected_count=request.num_questions
+        )
+        call.record("valid" if isinstance(parsed, QuestionBatch) else parsed)
+        if isinstance(parsed, ProviderFailure):
+            raise HTTPException(
+                status_code=503, detail="Question generation unavailable"
+            )
         if not isinstance(parsed, QuestionBatch):
             raise HTTPException(
                 status_code=502, detail="Invalid question generation output"

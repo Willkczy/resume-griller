@@ -54,6 +54,7 @@ async def execute_command(
         current_answer=current_answer if action == "answer" else None,
         error=None,
         response_evaluation=None,
+        model_executions=[],
         updated_at=datetime.now(UTC).isoformat(),
     )
     config = {"configurable": {"thread_id": session_id}}

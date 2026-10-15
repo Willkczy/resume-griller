@@ -9,6 +9,9 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
 from backend.app.config import settings
+from backend.app.core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -112,8 +115,8 @@ class ElevenLabsTTSService:
                 content_type="audio/mpeg",
             )
 
-        except Exception as e:
-            print(f"ElevenLabs TTS error: {e}")
+        except Exception:
+            logger.warning("speech_synthesis_unavailable")
             return SpeechResult(
                 audio_data=b"",
                 audio_base64="",
@@ -157,8 +160,8 @@ class ElevenLabsTTSService:
             for chunk in audio_generator:
                 yield chunk
 
-        except Exception as e:
-            print(f"ElevenLabs TTS stream error: {e}")
+        except Exception:
+            logger.warning("speech_stream_unavailable")
 
     async def get_available_voices(self) -> list:
         """Get list of available voices."""
@@ -178,8 +181,8 @@ class ElevenLabsTTSService:
 
             return await loop.run_in_executor(None, _get_voices)
 
-        except Exception as e:
-            print(f"Error getting voices: {e}")
+        except Exception:
+            logger.warning("voice_list_unavailable")
             return []
 
 

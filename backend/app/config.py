@@ -6,6 +6,7 @@ Supports both API-based and Local LLM inference.
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,6 +36,9 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     GOOGLE_API_KEY: str | None = None
     GROQ_API_KEY: str | None = None
+
+    # One bounded attempt; SDK automatic retries are disabled.
+    LLM_REQUEST_TIMEOUT_SECONDS: float = Field(default=60, gt=0, le=300)
 
     # Model names
     ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"

@@ -1,6 +1,6 @@
 # 0003 — Explicit model output contracts
 
-Date: 2026-09-22. Updated: 2026-10-10. Status: stages 1–3 implemented; metadata and CI pending.
+Date: 2026-09-22. Updated: 2026-10-15. Status: M2 engineering complete; hosted CI verified; review and owner learning pending.
 
 ## Why
 
@@ -165,3 +165,116 @@ Owner exercise: predict the public outcome, score availability and allowed actio
 a valid zero score, insufficient evidence, malformed JSON and timeout. Then trace
 `interview_snapshot`, the command guard and the frontend outcome helper. Implementation
 was delegated; owner understanding remains pending/not assessed.
+
+
+## Stage 4 execution metadata and safe diagnostics
+
+Implemented on 2026-10-13. Public snapshot identity is now `interview-outcome-v2`;
+the additive metadata contract is `model-execution-v1`. Model-output JSON remains
+`model-output-v1`: a model cannot supply execution metadata. Existing prompt/rubric
+identities remain unchanged; first metadata identities are assigned to the unchanged
+resume Markdown, Hybrid summary and question-context prompts.
+
+`BaseLLMService.generate` returns a request-local `ModelResult`. `call_model` measures
+one attempt using a monotonic clock, catches provider failures into safe categories,
+and creates an application UUID. The caller parses text and finalizes/logs its outcome.
+No singleton "last response" state is used. Legacy injected string-only adapters have
+unknown provider fields rather than inferred usage. Active production adapters return
+typed results. Hybrid preprocessing records Groq; generic Hybrid routing identifies
+the actual selected adapter, including on failure. Unsupported compact evaluation and
+reuse of a validated suggested follow-up create no invented call record.
+
+The graph stores only the latest command's `model_executions`. Evaluation and a separate
+follow-up call can coexist in this list; successful Hybrid preparation carries its
+summary/questions/context records into startup. Read/resume/reconnect preserves IDs
+and timings. The next mutating command replaces the list, including skip/end with no
+calls. Earlier checkpoints project an empty list. This is not M4's ledger, session cost
+aggregation, an external tracing system or M5 idempotency/recovery. Resume parsing and
+the standalone question endpoint emit safe execution logs but do not create an
+interview checkpoint. Failed Hybrid preparation emits its diagnostics without claiming
+that a session was created.
+
+- `configured_model` is the requested model label; `model` is the SDK-reported label,
+  which may still be an alias rather than an immutable revision. Missing provider
+  request IDs, token counts and totals stay null. Reported zero stays zero. No local
+  token estimates or invented totals/costs are substituted. Cost and external trace
+  identity are null until a trustworthy source is implemented.
+- OpenAI/Groq/Custom map prompt/completion/total usage. Anthropic's input counter
+  excludes its separately reported cache-read/cache-creation counts; those counters
+  are preserved separately and total remains null. Gemini's protobuf message presence
+  distinguishes absent usage from reported default-zero counters. Its installed SDK
+  exposes model version and finish reason but no public request ID here. SDK-shaped
+  mocked fixtures verify these mappings. The OpenAI field mapping follows the
+  [Chat Completions response reference](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create).
+- Explicit finish reasons outside the supported normal stops reject the output,
+  including length limits, content filters, safety blocks and tool calls. Missing
+  finish reason remains unknown and still requires strict parsing. The six synthetic
+  complete-looking evaluation cases with incomplete/blocked reasons are now rejected;
+  the previous adapters discarded those reasons before parsing. This is a contract
+  behavior delta, not evidence of improved model judgment.
+- `LLM_REQUEST_TIMEOUT_SECONDS` bounds each active non-streaming call. SDK automatic
+  retries are disabled; Gemini also receives an RPC timeout and `retry=None`. Cancelling
+  the await cannot prove the remote provider stopped or immediately terminate Gemini's
+  synchronous worker thread. No automatic retry or safe-resubmission promise is made.
+  Unused streaming helpers do not emit this non-streaming metadata contract.
+- Structured diagnostics contain application-owned call ID, operation, safe outcome/
+  error category, token counts, latency and version identities. Free-form model/request
+  labels are kept out of logs as well as prompts, resume/answer/audio content, SDK
+  response bodies and exception text. SDK debug logging is suppressed at configuration
+  and before calls, including late imports. Retained voice/WS exception diagnostics
+  now use fixed messages; voice behavior and lack of device verification are unchanged.
+
+Owner exercise: predict null versus zero usage, compare configured and reported model
+identity, then trace one timeout and one truncated response from `ModelResult` through
+`call_model`, the engine, graph checkpoint and both public transports. Explain why the
+call UUID is not an idempotency key and why a timeout has no score. Implementation was
+delegated; owner understanding remains pending/not assessed. Review this local stage
+before authorizing stage 5 CI. Do not start M3/Jev yet.
+
+
+## Stage 5 deterministic CI and acceptance evidence
+
+The owner authorized this stage on 2026-10-15. [The workflow](../../.github/workflows/ci.yml)
+defines independent backend and frontend jobs on push/PR/manual dispatch. Jobs have
+bounded execution time and read-only repository access; actions are pinned to verified
+release commits. No application/provider secrets, deployment, raw trace artifacts or
+runtime databases are part of the workflow. Python installs with `--locked` to reject
+manifest/lock drift, then checks run with `--frozen`; npm installs with `npm ci`.
+Runner/tool selections live in the workflow rather than duplicated guidance.
+The setup follows the official [uv](https://github.com/astral-sh/setup-uv) and
+[Node action](https://github.com/actions/setup-node) interfaces. Merge protection must
+be configured separately; CI configuration alone is not an enforced repository rule.
+
+`tests/conftest.py` sets test storage and cache paths before application imports, clears
+provider credentials and disables dotenv loading using Pydantic's public `_env_file`
+override. Model downloads and tracing are disabled. An autouse socket/DNS guard rejects
+network attempts during tests and checks again at teardown so swallowed provider errors
+cannot hide an attempted call. Asyncio's Unix sockets and in-process TestClient remain
+usable. The new synthetic `ci-isolation-v1` cases prove dotenv/credential/storage isolation
+and fail child pytest runs on DNS, connect, connect_ex and create_connection attempts.
+The guard supplements existing explicit LLM/STT/TTS/Chroma mocks; it is not an operating
+system firewall or a mechanism for running live-provider tests.
+
+| M2 acceptance item | Deterministic evidence |
+|---|---|
+| Malformed, missing, mistyped, unknown and invalid scores have no ordinary evaluation | `test_model_outputs.py`, `test_interview_flow.py` and public-schema fixtures |
+| Valid zero and insufficient evidence stay distinct from provider failure | `test_stage3_outcomes.py` plus frontend `interview-outcomes.test.mjs` |
+| Experimental modes report their evaluation limitation | Custom/Hybrid cases in `test_interview_flow.py` and `test_model_failures.py` |
+| Version/provider outcomes, incomplete finish reasons and safe logs | `test_model_execution.py` using SDK-shaped mocked results |
+| Deterministic backend and frontend CI commands | Workflow, clean local rehearsal and both hosted Linux jobs passing; run links in the handoff |
+| Owner explains rejection categories and diagnoses a response | Pending/not assessed; implementation was delegated |
+
+Backend CI includes the full test suite, Ruff, Black and the mocked graph smoke script.
+Frontend CI includes synthetic outcome fixtures, TypeScript, ESLint and production build.
+The clean rehearsal used fresh locked Python/npm installations, no dotenv files or
+provider credentials, and passed all steps. Both hosted Linux jobs subsequently passed
+on implementation commit `d7d7e6e`; see the dated handoff for run evidence. This stage changes test/CI infrastructure;
+prompts, rubrics, model-output schemas and interview behavior are unchanged, so there is
+no new AI behavior or quality delta. Existing fixture identities remain intact.
+
+Owner exercise: identify which job rejects a broken output contract versus a TypeScript
+error, explain why a caught provider network attempt fails teardown, then distinguish a
+green deterministic gate from evidence of evaluator correctness. Owner learning remains
+pending, independently of engineering checks. The next milestone is M3 only after stage
+review and successful hosted CI; begin with human-reviewed pilot labels and the planned
+Jev comparison, not an automatic interview-policy change.

@@ -16,7 +16,7 @@ acceptance gates.
 From the repository root:
 
 ```bash
-uv sync --extra dev
+uv sync --locked --extra dev
 cp .env.example .env
 ```
 
@@ -80,16 +80,16 @@ request when practical.
 Backend tests:
 
 ```bash
-PYTHONPATH=. uv run --extra dev pytest tests/
-PYTHONPATH=. uv run --extra dev pytest tests/ --cov=backend --cov=rag \
+PYTHONPATH=. uv run --frozen --extra dev pytest tests/
+PYTHONPATH=. uv run --frozen --extra dev pytest tests/ --cov=backend --cov=rag \
   --cov-report=term-missing
 ```
 
 Python quality:
 
 ```bash
-uv run --extra dev ruff check backend rag/retriever.py tests --config pyproject.toml
-uv run --extra dev black --check backend rag/retriever.py tests
+uv run --frozen --extra dev ruff check backend rag/retriever.py tests scripts/test_graph.py --config pyproject.toml
+uv run --frozen --extra dev black --check backend rag/retriever.py tests scripts/test_graph.py
 ```
 
 Apply Python formatting when needed:
@@ -105,9 +105,9 @@ Frontend quality:
 ```bash
 cd frontend
 npm test
-npx tsc --noEmit
+npx tsc --noEmit --incremental false
 npm run lint
-npm run build
+NEXT_TELEMETRY_DISABLED=1 npm run build
 ```
 
 `npm test` compiles and tests the real outcome presentation/draft-reconciliation
@@ -118,8 +118,40 @@ browser and recovery testing.
 The graph smoke script uses mock services and needs no API key:
 
 ```bash
-PYTHONPATH=. uv run python scripts/test_graph.py
+PYTHONPATH=. uv run --frozen --extra dev python scripts/test_graph.py
 ```
+
+## Continuous integration
+
+[The CI workflow](../.github/workflows/ci.yml) runs `Backend checks` and `Frontend
+checks` on pushes, pull requests and manual dispatch. Both jobs must pass for a
+reviewable change. The workflow grants read-only repository access, pins actions by
+commit, disables persisted checkout credentials and cancels superseded runs. There
+are no deployment steps, provider secrets or runtime-data artifacts. Require these
+job checks in repository branch protection separately if merge enforcement is desired.
+
+The workflow is the source for runner/tool versions and exact commands. Python uses
+`uv sync --locked --extra dev` so a stale lockfile fails rather than being rewritten;
+subsequent steps use `--frozen`. Frontend uses `npm ci`. Caches contain dependency
+packages, and the full install is still required on a cache hit. The root legacy ML
+runtime dependencies are still installed; their simplification remains M6.
+
+`tests/conftest.py` isolates the backend before collection: Pydantic settings ignore
+local dotenv files, provider credentials are removed, runtime/cache directories are
+temporary, voice/custom health probes and tracing are disabled, and model downloads
+are offline. Tests mock provider and Chroma calls. An autouse guard rejects DNS and
+IPv4/IPv6 connections during tests; attempted I/O also fails teardown when an adapter
+catches the original exception. Unix sockets used by asyncio and in-process FastAPI
+TestClient requests remain available. The isolation checks run child pytest processes
+to prove these failures cannot silently become a green provider-failure test.
+
+Run the quality commands above to reproduce the job steps locally. Dependency setup
+requires registry access; the deterministic tests require no live providers, model
+downloads or personal environment files. To validate workflow syntax when Actionlint
+is installed, run `actionlint .github/workflows/ci.yml`. Local success is evidence for
+the commands tested; inspect both job results on the proposed PR revision for hosted
+CI evidence. A workflow file does not by itself enforce a merge rule or demonstrate
+model quality, browser/device support or M5 recovery guarantees.
 
 ## Where changes belong
 
@@ -196,3 +228,15 @@ Do not add a new technology or start an optional track solely to match a job pos
 On a new machine, fetch/switch to the pushed branch, preserve local edits, and verify
 status before installing dependencies. Copy environment examples only when the local
 files do not exist. Credentials and runtime data are not transferred through Git.
+
+
+### Model execution diagnostics
+
+`tests/test_model_execution.py` uses synthetic text and actual SDK response schemas
+with mocked transports. It covers nullable usage, provider identity, deadlines,
+concurrent-call isolation, finish-reason rejection, safe logs and checkpoint/transport
+parity. No provider key or network call is required. Inspect `model_executions` in a
+synthetic session response to correlate an application `call_id` with safe logs.
+Do not enable SDK request-body logging or log model inputs/outputs when debugging.
+See [decision 0003](decisions/0003-model-output-contracts.md) for counter semantics,
+metadata lifetime and the pending owner exercise.

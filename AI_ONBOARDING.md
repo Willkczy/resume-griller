@@ -113,14 +113,19 @@ handoff with engineering evidence and owner learning status separately.
   insufficient evidence and unsupported compact evaluation have no score and do not
   advance the interview. Public outcome unions and dedicated UI restore submitted
   drafts and failures from the checkpoint on manual reconnect. Allowed actions come
-  from the shared command guard; reconnect does not resubmit. Provider metadata and
-  deterministic CI are still M2 work.
+  from the shared command guard; reconnect does not resubmit. Stage 4 captures
+  application-owned execution metadata and safe timings in `model_executions` for
+  the latest command. Missing usage/cost stay null; no SDK automatic retries.
+  Stage 5 adds deterministic backend/frontend CI; both hosted jobs pass in the
+  draft PR. M2 engineering is complete and awaits review; owner learning remains pending.
 - Full resume text is stored in state but evaluation prompts truncate context.
 - Voice is batch-based and disabled by default in settings and `.env.example`.
   The root dependency set lacks ElevenLabs; live voice remains experimental.
   See `docs/decisions/0001-text-only-baseline.md`.
 - Custom/Hybrid mode requires a separately hosted OpenAI-compatible model.
-- No CI workflow or production container configuration exists. Frontend outcome
-  fixtures exercise presentation/reconciliation; broader browser/recovery coverage
-  remains unfinished.
+- `.github/workflows/ci.yml` checks locked dependency setup, isolated backend/contract
+  tests, Python lint/format, graph smoke, frontend fixtures, types, lint and build.
+  Tests ignore local dotenv/credentials and reject network attempts. Branch-protection
+  enforcement is separate. Production containers and broader browser/recovery coverage
+  remain unfinished.
 - No real-user processing or public beta is allowed before roadmap M9 passes.

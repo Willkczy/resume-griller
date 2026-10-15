@@ -12,15 +12,33 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 
 from backend.app.config import settings
+from backend.app.models.model_execution import TokenUsage
 from backend.app.models.model_outputs import (
+    MODEL_OUTPUT_SCHEMA_VERSION,
+    InvalidOutput,
     QuestionBatch,
     UnsupportedMode,
     parse_questions,
+)
+from backend.app.services.model_execution import (
+    ModelResult,
+    call_model,
+    chat_usage,
+    token_count,
 )
 
 
 class BaseLLMService(ABC):
     """Abstract base class for LLM services."""
+
+    provider = None
+
+    @property
+    def model_name(self) -> str | None:
+        return self.model if isinstance(self.model, str) else self.model.model_name
+
+    def execution_identity(self, prompt: str) -> tuple[str | None, str | None]:
+        return self.provider, self.model_name
 
     @abstractmethod
     async def generate(
@@ -29,7 +47,7 @@ class BaseLLMService(ABC):
         system_prompt: str | None = None,
         max_tokens: int = 1024,
         temperature: float = 0.7,
-    ) -> str:
+    ) -> ModelResult:
         """Generate a response from the LLM."""
         pass
 
@@ -48,11 +66,17 @@ class BaseLLMService(ABC):
 class AnthropicService(BaseLLMService):
     """Claude API service."""
 
+    provider = "anthropic"
+
     def __init__(self):
         try:
             from anthropic import AsyncAnthropic
 
-            self.client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+            self.client = AsyncAnthropic(
+                api_key=settings.ANTHROPIC_API_KEY,
+                timeout=settings.LLM_REQUEST_TIMEOUT_SECONDS,
+                max_retries=0,
+            )
             self.model = settings.ANTHROPIC_MODEL
         except ImportError:
             raise ImportError(
@@ -65,7 +89,7 @@ class AnthropicService(BaseLLMService):
         system_prompt: str | None = None,
         max_tokens: int = 1024,
         temperature: float = 0.7,
-    ) -> str:
+    ) -> ModelResult:
         messages = [{"role": "user", "content": prompt}]
 
         response = await self.client.messages.create(
@@ -76,7 +100,27 @@ class AnthropicService(BaseLLMService):
             messages=messages,
         )
 
-        return response.content[0].text
+        usage = response.usage
+        return ModelResult(
+            text="".join(
+                block.text for block in response.content if block.type == "text"
+            ),
+            provider=self.provider,
+            configured_model=self.model_name,
+            model=response.model,
+            provider_request_id=getattr(response, "_request_id", None),
+            finish_reason=response.stop_reason,
+            usage=TokenUsage(
+                input_tokens=token_count(getattr(usage, "input_tokens", None)),
+                output_tokens=token_count(getattr(usage, "output_tokens", None)),
+                cache_read_input_tokens=token_count(
+                    getattr(usage, "cache_read_input_tokens", None)
+                ),
+                cache_creation_input_tokens=token_count(
+                    getattr(usage, "cache_creation_input_tokens", None)
+                ),
+            ),
+        )
 
     async def generate_stream(
         self,
@@ -101,11 +145,17 @@ class AnthropicService(BaseLLMService):
 class OpenAIService(BaseLLMService):
     """OpenAI API service."""
 
+    provider = "openai"
+
     def __init__(self):
         try:
             from openai import AsyncOpenAI
 
-            self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+            self.client = AsyncOpenAI(
+                api_key=settings.OPENAI_API_KEY,
+                timeout=settings.LLM_REQUEST_TIMEOUT_SECONDS,
+                max_retries=0,
+            )
             self.model = settings.OPENAI_MODEL
         except ImportError:
             raise ImportError("openai package not installed. Run: pip install openai")
@@ -116,7 +166,7 @@ class OpenAIService(BaseLLMService):
         system_prompt: str | None = None,
         max_tokens: int = 1024,
         temperature: float = 0.7,
-    ) -> str:
+    ) -> ModelResult:
         messages = [
             {
                 "role": "system",
@@ -132,7 +182,15 @@ class OpenAIService(BaseLLMService):
             temperature=temperature,
         )
 
-        return response.choices[0].message.content
+        return ModelResult(
+            text=response.choices[0].message.content or "",
+            provider=self.provider,
+            configured_model=self.model_name,
+            model=response.model,
+            provider_request_id=getattr(response, "_request_id", None),
+            finish_reason=response.choices[0].finish_reason,
+            usage=chat_usage(response.usage),
+        )
 
     async def generate_stream(
         self,
@@ -165,6 +223,8 @@ class OpenAIService(BaseLLMService):
 class GeminiService(BaseLLMService):
     """Google Gemini API service."""
 
+    provider = "gemini"
+
     def __init__(self):
         try:
             import google.generativeai as genai
@@ -190,7 +250,7 @@ class GeminiService(BaseLLMService):
         system_prompt: str | None = None,
         max_tokens: int = 1024,
         temperature: float = 0.7,
-    ) -> str:
+    ) -> ModelResult:
         """Generate response using Gemini."""
         full_prompt = prompt
         if system_prompt:
@@ -207,8 +267,40 @@ class GeminiService(BaseLLMService):
             response = self.model.generate_content(
                 full_prompt,
                 generation_config=generation_config,
+                request_options={
+                    "timeout": settings.LLM_REQUEST_TIMEOUT_SECONDS,
+                    "retry": None,
+                },
             )
-            return response.text
+            # The protobuf wrapper supplies an empty usage object when absent.
+            usage = (
+                response.usage_metadata
+                if "usage_metadata" in response._result
+                else None
+            )
+            candidate = response.candidates[0] if response.candidates else None
+            reason = candidate.finish_reason.name if candidate else None
+            text = (
+                "".join(part.text for part in candidate.content.parts)
+                if candidate
+                else ""
+            )
+            return ModelResult(
+                text=text,
+                provider=self.provider,
+                configured_model=self.model_name,
+                model=response.model_version or None,
+                finish_reason=reason,
+                usage=TokenUsage(
+                    input_tokens=token_count(
+                        getattr(usage, "prompt_token_count", None)
+                    ),
+                    output_tokens=token_count(
+                        getattr(usage, "candidates_token_count", None)
+                    ),
+                    total_tokens=token_count(getattr(usage, "total_token_count", None)),
+                ),
+            )
 
         return await loop.run_in_executor(None, _generate)
 
@@ -235,6 +327,10 @@ class GeminiService(BaseLLMService):
             response = self.model.generate_content(
                 full_prompt,
                 generation_config=generation_config,
+                request_options={
+                    "timeout": settings.LLM_REQUEST_TIMEOUT_SECONDS,
+                    "retry": None,
+                },
                 stream=True,
             )
             return response
@@ -256,13 +352,18 @@ class GeminiService(BaseLLMService):
 class GroqService(BaseLLMService):
     """Groq API service - Ultra fast inference with Llama models."""
 
+    provider = "groq"
+
     def __init__(self):
         try:
             from groq import AsyncGroq
 
-            self.client = AsyncGroq(api_key=settings.GROQ_API_KEY)
+            self.client = AsyncGroq(
+                api_key=settings.GROQ_API_KEY,
+                timeout=settings.LLM_REQUEST_TIMEOUT_SECONDS,
+                max_retries=0,
+            )
             self.model = settings.GROQ_MODEL
-            print(f"Groq initialized with model: {self.model}")
         except ImportError:
             raise ImportError("groq package not installed. " "Run: uv add groq")
 
@@ -272,7 +373,7 @@ class GroqService(BaseLLMService):
         system_prompt: str | None = None,
         max_tokens: int = 1024,
         temperature: float = 0.7,
-    ) -> str:
+    ) -> ModelResult:
         """Generate response using Groq."""
         messages = []
         if system_prompt:
@@ -286,7 +387,15 @@ class GroqService(BaseLLMService):
             temperature=temperature,
         )
 
-        return response.choices[0].message.content
+        return ModelResult(
+            text=response.choices[0].message.content or "",
+            provider=self.provider,
+            configured_model=self.model_name,
+            model=response.model,
+            provider_request_id=getattr(getattr(response, "x_groq", None), "id", None),
+            finish_reason=response.choices[0].finish_reason,
+            usage=chat_usage(response.usage),
+        )
 
     async def generate_stream(
         self,
@@ -329,14 +438,12 @@ class CustomModelService(BaseLLMService):
     MAX_OUTPUT_TOKENS = 300
     CHARS_PER_TOKEN = 4
 
+    provider = "custom"
+
     def __init__(self):
         self.base_url = settings.CUSTOM_MODEL_URL
         self.model = settings.CUSTOM_MODEL_NAME
         self.timeout = settings.CUSTOM_MODEL_TIMEOUT
-        print("Custom Model Service initialized")
-        print(f"  URL: {self.base_url}")
-        print(f"  Model: {self.model}")
-        print(f"  Max context: {self.MAX_CONTEXT_TOKENS} tokens")
 
     def _format_prompt(self, prompt: str, system_prompt: str | None = None) -> str:
         """Format prompt for Mistral Instruct model."""
@@ -351,9 +458,6 @@ class CustomModelService(BaseLLMService):
             combined = prompt
 
         if len(combined) > max_chars:
-            print(
-                f"[CustomModel] Truncating prompt from {len(combined)} to {max_chars} chars"
-            )
             combined = combined[:max_chars]
 
         return f"[INST] {combined} [/INST]"
@@ -364,17 +468,12 @@ class CustomModelService(BaseLLMService):
         system_prompt: str | None = None,
         max_tokens: int = 1024,
         temperature: float = 0.7,
-    ) -> str:
+    ) -> ModelResult:
         """Generate response using custom vLLM model."""
         import httpx
 
         max_tokens = min(max_tokens, self.MAX_OUTPUT_TOKENS)
         formatted_prompt = self._format_prompt(prompt, system_prompt)
-
-        print(f"[CustomModel] Request to {self.base_url}/completions")
-        print(
-            f"[CustomModel] Prompt: {len(formatted_prompt)} chars (~{len(formatted_prompt)//self.CHARS_PER_TOKEN} tokens)"
-        )
 
         payload = {
             "model": self.model,
@@ -383,33 +482,23 @@ class CustomModelService(BaseLLMService):
             "temperature": temperature,
         }
 
-        try:
-            async with httpx.AsyncClient(timeout=float(self.timeout)) as client:
-                response = await client.post(
-                    f"{self.base_url}/completions",
-                    json=payload,
-                    headers={"Content-Type": "application/json"},
-                )
-
-                if response.status_code != 200:
-                    print(
-                        f"[CustomModel] Error {response.status_code}: {response.text[:200]}"
-                    )
-
-                response.raise_for_status()
-
-                result = response.json()
-                text = result["choices"][0]["text"].strip()
-
-                print(f"[CustomModel] Response: {len(text)} chars")
-                return text
-
-        except httpx.ConnectError as e:
-            print(f"[CustomModel] Connection error: {e}")
-            raise
-        except Exception as e:
-            print(f"[CustomModel] Error: {type(e).__name__}: {e}")
-            raise
+        async with httpx.AsyncClient(timeout=float(self.timeout)) as client:
+            response = await client.post(
+                f"{self.base_url}/completions",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            response.raise_for_status()
+            result = response.json()
+            return ModelResult(
+                text=result["choices"][0].get("text", "").strip(),
+                provider=self.provider,
+                configured_model=self.model_name,
+                model=result.get("model"),
+                provider_request_id=response.headers.get("x-request-id"),
+                finish_reason=result["choices"][0].get("finish_reason"),
+                usage=chat_usage(result.get("usage")),
+            )
 
     async def generate_stream(
         self,
@@ -423,7 +512,7 @@ class CustomModelService(BaseLLMService):
             prompt, system_prompt, max_tokens, temperature
         )
 
-        words = full_response.split()
+        words = full_response.text.split()
         for i, word in enumerate(words):
             yield word + (" " if i < len(words) - 1 else "")
 
@@ -440,6 +529,14 @@ class HybridModelService(BaseLLMService):
     3. Uses Custom Model's specialized training for interview tasks
     """
 
+    @property
+    def model_name(self) -> None:
+        return None
+
+    def execution_identity(self, prompt: str) -> tuple[str | None, str | None]:
+        selected = self.preprocessor if len(prompt) > 2000 else self.interviewer
+        return selected.provider, selected.model_name
+
     def __init__(self):
         # Initialize both services
         self.preprocessor = GroqService()  # For heavy lifting
@@ -447,10 +544,6 @@ class HybridModelService(BaseLLMService):
 
         # Storage for prepared context
         self._prepared_contexts: dict[str, dict] = {}
-
-        print(
-            "[HybridModel] Initialized with Groq (preprocessor) + Custom (interviewer)"
-        )
 
     async def prepare_interview_context(
         self,
@@ -470,7 +563,6 @@ class HybridModelService(BaseLLMService):
         Returns:
             Dict with prepared context to be stored in session
         """
-        print(f"[HybridModel] Preparing interview context for session {session_id}")
 
         # Step 1: Generate condensed resume summary
         summary_prompt = f"""Analyze this resume and create a CONDENSED summary (max 200 words) focusing on:
@@ -484,14 +576,18 @@ Resume:
 
 Provide ONLY the summary, no explanations:"""
 
-        resume_summary = await self.preprocessor.generate(
+        records = []
+        summary_call = await call_model(
+            self.preprocessor,
+            operation="resume_summary",
+            prompt_version="hybrid-summary-v1",
             prompt=summary_prompt,
             system_prompt="You are a resume analyzer. Be extremely concise.",
             max_tokens=300,
             temperature=0.3,
         )
 
-        print(f"[HybridModel] Generated resume summary: {len(resume_summary)} chars")
+        resume_summary = self._prepared_text(summary_call, records)
 
         # Step 2: Generate interview questions
         if mode == "tech":
@@ -515,7 +611,11 @@ Requirements:
 Question prompt version: hybrid-questions-v2.
 Return ONLY JSON: {{"questions": ["question text", "another question"]}}"""
 
-        questions_response = await self.preprocessor.generate(
+        questions_call = await call_model(
+            self.preprocessor,
+            operation="question_generation",
+            prompt_version="hybrid-questions-v2",
+            output_schema_version=MODEL_OUTPUT_SCHEMA_VERSION,
             prompt=questions_prompt,
             system_prompt=f"You are an expert {mode} interviewer. Generate specific, probing questions.",
             max_tokens=1500,
@@ -523,8 +623,15 @@ Return ONLY JSON: {{"questions": ["question text", "another question"]}}"""
         )
 
         # Parse questions
-        questions = self._parse_questions(questions_response, num_questions)
-        print(f"[HybridModel] Generated {len(questions)} questions")
+        parsed = questions_call.failure or parse_questions(
+            questions_call.text, expected_count=num_questions
+        )
+        questions_call.record(
+            "valid" if isinstance(parsed, QuestionBatch) else parsed, records
+        )
+        if not isinstance(parsed, QuestionBatch):
+            raise ValueError("Invalid prepared question output")
+        questions = parsed.questions
 
         # Step 3: Create per-question evaluation context
         question_contexts = []
@@ -539,20 +646,22 @@ Resume Summary:
 
 List 3-5 bullet points of relevant facts the candidate should mention. Be concise:"""
 
-            context = await self.preprocessor.generate(
+            context_call = await call_model(
+                self.preprocessor,
+                operation="question_context",
+                prompt_version="hybrid-question-context-v1",
                 prompt=context_prompt,
                 system_prompt="Extract only the most relevant facts. Be very concise.",
                 max_tokens=200,
                 temperature=0.3,
             )
-            question_contexts.append(context)
-
-        print(f"[HybridModel] Created {len(question_contexts)} question contexts")
+            question_contexts.append(self._prepared_text(context_call, records))
 
         # Store the prepared context
         prepared = {
             "session_id": session_id,
             "resume_summary": resume_summary,
+            "model_executions": records,
             "questions": questions,
             "question_contexts": question_contexts,
             "mode": mode,
@@ -561,6 +670,16 @@ List 3-5 bullet points of relevant facts the candidate should mention. Be concis
         self._prepared_contexts[session_id] = prepared
 
         return prepared
+
+    @staticmethod
+    def _prepared_text(call, records: list[dict]) -> str:
+        outcome = call.failure or (
+            "valid" if call.text.strip() else InvalidOutput(code="schema_violation")
+        )
+        call.record(outcome, records)
+        if outcome != "valid":
+            raise RuntimeError("Interview preparation unavailable")
+        return call.text.strip()
 
     def get_prepared_context(self, session_id: str) -> dict | None:
         """Get prepared context for a session."""
@@ -598,7 +717,7 @@ List 3-5 bullet points of relevant facts the candidate should mention. Be concis
         system_prompt: str | None = None,
         max_tokens: int = 1024,
         temperature: float = 0.7,
-    ) -> str:
+    ) -> ModelResult:
         """
         Default generate method - routes to appropriate service.
 
@@ -606,12 +725,10 @@ List 3-5 bullet points of relevant facts the candidate should mention. Be concis
         For short prompts: Use Custom Model
         """
         if len(prompt) > 2000:
-            print("[HybridModel] Using Groq for long prompt")
             return await self.preprocessor.generate(
                 prompt, system_prompt, max_tokens, temperature
             )
         else:
-            print("[HybridModel] Using Custom Model for short prompt")
             return await self.interviewer.generate(
                 prompt, system_prompt, min(max_tokens, 300), temperature
             )
@@ -672,35 +789,29 @@ class LLMServiceFactory:
         if provider == "anthropic":
             if not settings.ANTHROPIC_API_KEY:
                 raise ValueError("ANTHROPIC_API_KEY not set")
-            print("Initializing Anthropic (Claude) Service")
             return AnthropicService()
 
         elif provider == "openai":
             if not settings.OPENAI_API_KEY:
                 raise ValueError("OPENAI_API_KEY not set")
-            print("Initializing OpenAI Service")
             return OpenAIService()
 
         elif provider == "gemini":
             if not settings.GOOGLE_API_KEY:
                 raise ValueError("GOOGLE_API_KEY not set")
-            print("Initializing Google Gemini Service")
             return GeminiService()
 
         elif provider == "groq":
             if not settings.GROQ_API_KEY:
                 raise ValueError("GROQ_API_KEY not set")
-            print("Initializing Groq Service")
             return GroqService()
 
         elif provider == "custom":
             if not settings.CUSTOM_MODEL_URL:
                 raise ValueError("CUSTOM_MODEL_URL not set")
-            print("Initializing Custom Model Service (GCP VM)")
             return CustomModelService()
 
         elif provider == "hybrid":
-            print("Initializing Hybrid Model Service")
             return cls.get_hybrid_service()
 
         else:

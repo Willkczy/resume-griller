@@ -33,6 +33,7 @@ interview = shared_interview
 
 SECOND_QUESTION = "What did you learn from the synthetic queue experiment?"
 SNAPSHOT_FIELDS = (
+    "model_executions",
     "evaluation",
     "generation_failure",
     "draft_answer",

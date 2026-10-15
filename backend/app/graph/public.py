@@ -136,6 +136,7 @@ def interview_snapshot(state: InterviewState, session_id: str) -> InterviewSnaps
         ],
         created_at=state.get("created_at", ""),
         updated_at=state.get("updated_at", ""),
+        model_executions=state.get("model_executions", []),
         evaluation=evaluation,
         generation_failure=generation_failure,
         draft_answer=state.get("current_answer") if unscored else None,
